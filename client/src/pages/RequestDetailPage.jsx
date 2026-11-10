@@ -8,7 +8,13 @@ import EvidencePicker from '../components/EvidencePicker.jsx'
 import IndicatorList from '../components/IndicatorList.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Button, Card, ErrorAlert, TextAreaField } from '../components/ui.jsx'
-import { CHANNEL_LABELS, EVIDENCE_RULES, MONEY_PURPOSE_LABELS, isClosedStatus } from '../constants/caseStatus.js'
+import {
+  CHANNEL_LABELS,
+  EVIDENCE_RULES,
+  MONEY_PURPOSE_LABELS,
+  STUDENT_OUTCOME_COPY,
+  isClosedStatus,
+} from '../constants/caseStatus.js'
 
 const yesNo = (value) => (value ? 'Yes' : 'No')
 
@@ -69,10 +75,20 @@ export default function RequestDetailPage() {
         <ErrorAlert message="Your request was submitted, but the evidence could not be uploaded. Please add it again below." />
       )}
 
-      {request.decision && (
-        <Card title="Placement cell decision">
-          <p className="whitespace-pre-wrap text-slate-700">{request.decision.basis}</p>
-        </Card>
+      {closed && (
+        <section aria-label="Outcome" className="space-y-2 rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-semibold text-slate-900">Outcome</h2>
+            <StatusBadge status={request.status} />
+          </div>
+          <p className="font-medium text-slate-900">{STUDENT_OUTCOME_COPY[request.status]}</p>
+          {request.decision?.message && (
+            <p className="whitespace-pre-wrap rounded bg-slate-50 p-3 text-slate-800">{request.decision.message}</p>
+          )}
+          {request.decision?.decidedAt && (
+            <p className="text-xs text-slate-500">Decided {new Date(request.decision.decidedAt).toLocaleDateString()}</p>
+          )}
+        </section>
       )}
 
       <Card title="Summary">

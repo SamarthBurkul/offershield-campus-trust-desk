@@ -14,6 +14,7 @@ const {
   toStudentEvidenceView,
 } = require('../utils/caseViews');
 const audit = require('./audit.service');
+const { allowedFrom } = require('./caseStateMachine');
 
 const caseNotFound = () => new AppError(404, 'NOT_FOUND', 'Request not found');
 const caseClosed = () => new AppError(409, 'CASE_CLOSED', 'This request is closed and cannot be changed');
@@ -138,23 +139,24 @@ async function addStudentMessage(student, caseId, { body }, { ip }) {
     visibleToStudent: true,
   });
 
-  const update = {
-    $set: {
-      lastActivityAt: now,
-      indicators: mergeIndicators(found.indicators, extractIndicators({ messageText: body })),
-    },
-  };
-  // A reply answers the placement cell's question, so the case goes back for review.
-  const reopensReview = found.status === 'awaiting_student';
-  if (reopensReview) update.$set.status = 'under_review';
-  await caseRepository.forTenant(collegeId).updateOne({ _id: found._id, studentId: student.id }, update);
+  const cases = caseRepository.forTenant(collegeId);
+  const indicators = mergeIndicators(found.indicators, extractIndicators({ messageText: body }));
 
-  if (reopensReview) {
+  // A reply answers the placement cell's question, so the case goes back for review (atomic, conditional).
+  const reopened = await cases.findOneAndUpdate(
+    { _id: found._id, studentId: student.id, status: { $in: allowedFrom('student_reply', 'under_review') } },
+    { $set: { status: 'under_review', lastActivityAt: now, indicators } },
+  );
+  const reopensReview = Boolean(reopened);
+  if (!reopensReview) {
+    await cases.updateOne({ _id: found._id, studentId: student.id }, { $set: { lastActivityAt: now, indicators } });
+  } else {
     await events.create({
       caseId: found._id,
       type: 'status_changed',
       actorId: student.id,
       actorRole: student.role,
+      body: 'Your reply was received. Your request is back under review.',
       visibleToStudent: true,
       metadata: { from: 'awaiting_student', to: 'under_review' },
     });

@@ -15,6 +15,24 @@ const CLOSED_STATUSES = Object.freeze(['confirmed_fraud', 'verified_genuine', 'i
 
 const isClosedStatus = (status) => CLOSED_STATUSES.includes(status);
 
+const OPEN_STATUSES = Object.freeze(['submitted', 'under_review', 'awaiting_student']);
+
+// A decision's type is the final status it sets.
+const DECISION_TYPES = CLOSED_STATUSES;
+
+const DECISION_CHECKS = Object.freeze([
+  'called_official_number',
+  'matched_official_domain',
+  'checked_official_careers_page',
+  'mca_or_gst_lookup',
+  'contacted_company_hr',
+  'prior_campus_drive',
+  'reviewed_student_evidence',
+  'other',
+]);
+
+const DISMISS_REASONS = Object.freeze(['duplicate', 'not_an_opportunity', 'insufficient_information', 'other']);
+
 const CHANNELS = Object.freeze([
   'whatsapp',
   'telegram',
@@ -48,6 +66,7 @@ const CASE_EVENT_TYPES = Object.freeze([
   'assigned',
   'decision_recorded',
   'reopened',
+  'recommendation_made',
 ]);
 
 const INDICATOR_TYPES = Object.freeze(['email', 'domain', 'phone', 'upi', 'url']);
@@ -63,6 +82,10 @@ module.exports = {
   CASE_STATUSES,
   CLOSED_STATUSES,
   isClosedStatus,
+  OPEN_STATUSES,
+  DECISION_TYPES,
+  DECISION_CHECKS,
+  DISMISS_REASONS,
   CHANNELS,
   MONEY_PURPOSES,
   PRIORITIES,

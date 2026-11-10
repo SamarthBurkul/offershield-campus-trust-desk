@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const { appendOnly } = require('./plugins/appendOnly');
 
 const auditLogSchema = new mongoose.Schema(
   {
@@ -19,29 +20,8 @@ const auditLogSchema = new mongoose.Schema(
 
 auditLogSchema.index({ collegeId: 1, createdAt: -1 });
 
-function rejectMutation() {
-  throw new Error('AuditLog is append-only');
-}
-
 // Append-only: block every query and document operation that would change or remove entries.
-const BLOCKED_QUERY_OPS = [
-  'updateOne',
-  'updateMany',
-  'findOneAndUpdate',
-  'findOneAndReplace',
-  'findOneAndDelete',
-  'replaceOne',
-  'deleteOne',
-  'deleteMany',
-];
-for (const op of BLOCKED_QUERY_OPS) {
-  auditLogSchema.pre(op, { document: false, query: true }, rejectMutation);
-}
-auditLogSchema.pre(['updateOne', 'deleteOne'], { document: true, query: false }, rejectMutation);
-auditLogSchema.pre('save', function rejectResave() {
-  if (!this.isNew) rejectMutation();
-});
-auditLogSchema.pre('bulkWrite', rejectMutation);
+appendOnly(auditLogSchema, { name: 'AuditLog' });
 
 const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', auditLogSchema);
 

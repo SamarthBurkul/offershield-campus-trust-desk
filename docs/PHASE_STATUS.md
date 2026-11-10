@@ -4,15 +4,44 @@
 | --- | --- | --- |
 | 1 | Foundation: monorepo, Express API with health endpoint, security baseline, validated config, React client shell, tests, docs | **Passed (architect-reviewed 2026-11-10)** |
 | 2 | MongoDB, authentication, four roles, college tenancy and isolation, staff management, append-only audit log, seed scripts | **Passed (architect-reviewed 2026-11-10)** |
-| 3 | Student verification requests, evidence (GridFS), indicator extraction | **Implemented — awaiting architect review** |
-| 4 | Case desk, decisions, audit views | Not started |
+| 3 | Student verification requests, evidence (GridFS), indicator extraction | **Passed (architect-reviewed 2026-11-10)** |
+| 4 | TPO investigation desk, decisions, audit trail | **Implemented — awaiting architect review** |
 | 5 | Registry, lookup, linking, warning signals | Not started |
 | 6 | Advisories, notifications, stats | Not started |
 | 7 | Security test suite, deployment (one Render web service), docs | Not started |
 
-## Phase 3 — details
+## Phase 4 — details
 
 **Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- `Note` model (staff-only, append-only via a shared plugin also used by `AuditLog`); Case `recommendation`, full `decision`, `decisionHistory`; `recommendation_made` event type; `CASE_STALE_DAYS` config.
+- Pure state machine with atomic conditional transitions (404 vs 409), including concurrent-decision safety.
+- Staff API: queue (filters, normalised indicator search, escaped company search, stale flag, pagination), counts, staff detail, assignment, status, info request, staff message, notes, recommendation, decision (TPO head; checks, confirmed indicators, verified domains, duplicate handling), reopen with history, audit log query (TPO head).
+- Student contract tightened: decision only `{ type, decidedAt, message }`; event metadata never sent.
+- Client: staff home counts, Case desk (tabs, filters, search, URL params, pagination), Staff case detail (3 panels, assignee control, visibility-marked timeline, composer with internal-note lock, notes panel, recommendation / decision forms with confirmation, decision summary, reopen dialog, 409 banner), Audit log page, student outcome card.
+
+### Tests executed (2026-11-10, Node v22.13.1, MongoDB 8.2.6 in memory)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm run test:server` | Test Suites: 18 passed, 18 total; Tests: 247 passed, 247 total | 0 |
+| `npm run test:client` | Test Files 5 passed (5); Tests 26 passed (26) | 0 |
+| `npm test` | 247 server + 26 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | `client/dist` produced | 0 |
+| Browser smoke (headless Chrome driven through the UI, demo accounts on Atlas) | steps 1–6 as specified | — |
+
+### Limitations
+
+- Single-approver decisions; no registry revocation on reopen yet (Phase 5).
+- Events/audit are written after, not atomically with, the status update.
+- No stale-only queue filter (stale is a flag and a count).
+
+## Phase 3 — details
+
+**Status:** Passed (architect-reviewed 2026-11-10).
 
 ### Implemented
 
@@ -85,4 +114,4 @@
 - React 19 + Vite 8 + Tailwind v4 client shell with HealthStatus and a single axios instance.
 - Tests at sign-off: server 18/18, client 5/5; build and lint exit 0.
 
-**Next authorised phase:** none until architect approval of Phase 3.
+**Next authorised phase:** none until architect approval of Phase 4.

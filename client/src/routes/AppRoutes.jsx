@@ -4,6 +4,8 @@ import Layout from '../components/Layout.jsx'
 import ProtectedRoute from '../components/ProtectedRoute.jsx'
 import AdminCollegeDetailPage from '../pages/AdminCollegeDetailPage.jsx'
 import AdminCollegesPage from '../pages/AdminCollegesPage.jsx'
+import AuditLogPage from '../pages/AuditLogPage.jsx'
+import CaseQueuePage from '../pages/CaseQueuePage.jsx'
 import ChangePasswordPage from '../pages/ChangePasswordPage.jsx'
 import HomePage from '../pages/HomePage.jsx'
 import LoginPage from '../pages/LoginPage.jsx'
@@ -12,6 +14,7 @@ import NewRequestPage from '../pages/NewRequestPage.jsx'
 import NotFoundPage from '../pages/NotFoundPage.jsx'
 import RegisterPage from '../pages/RegisterPage.jsx'
 import RequestDetailPage from '../pages/RequestDetailPage.jsx'
+import StaffCaseDetailPage from '../pages/StaffCaseDetailPage.jsx'
 import StaffHomePage from '../pages/StaffHomePage.jsx'
 import StaffMembersPage from '../pages/StaffMembersPage.jsx'
 import StudentHomePage from '../pages/StudentHomePage.jsx'
@@ -37,6 +40,11 @@ export default function AppRoutes() {
           <Route path="staff" element={<StaffHomePage />} />
           {/* Officers may view the list; only TPO heads see the management controls. */}
           <Route path="staff/members" element={<StaffMembersPage />} />
+          <Route path="staff/cases" element={<CaseQueuePage />} />
+          <Route path="staff/cases/:id" element={<StaffCaseDetailPage />} />
+        </Route>
+        <Route element={<ProtectedRoute allowedRoles={[ROLES.TPO_HEAD]} />}>
+          <Route path="staff/audit" element={<AuditLogPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN]} />}>
           <Route path="admin" element={<AdminCollegesPage />} />

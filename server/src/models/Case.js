@@ -8,6 +8,9 @@ const {
   PRIORITIES,
   INDICATOR_TYPES,
   INDICATOR_SOURCES,
+  DECISION_TYPES,
+  DECISION_CHECKS,
+  DISMISS_REASONS,
 } = require('../constants/caseStatus');
 
 const { ObjectId } = mongoose.Schema.Types;
@@ -27,6 +30,44 @@ const indicatorSchema = new mongoose.Schema(
     type: { type: String, enum: INDICATOR_TYPES, required: true },
     value: { type: String, required: true, maxlength: 600 },
     source: { type: String, enum: INDICATOR_SOURCES, required: true },
+  },
+  { _id: false },
+);
+
+const recommendationSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: DECISION_TYPES, required: true },
+    basis: { type: String, required: true, maxlength: 2000 },
+    by: { type: ObjectId, ref: 'User', required: true },
+    at: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
+const decisionFields = {
+  type: { type: String, enum: DECISION_TYPES, required: true },
+  basis: { type: String, required: true, maxlength: 3000 },
+  checks: { type: [{ type: String, enum: DECISION_CHECKS }], default: [] },
+  studentMessage: { type: String, maxlength: 1000, default: null },
+  confirmedIndicators: {
+    type: [new mongoose.Schema({ type: { type: String, enum: INDICATOR_TYPES, required: true }, value: { type: String, required: true } }, { _id: false })],
+    default: [],
+  },
+  verifiedDomains: { type: [String], default: [] },
+  dismissReason: { type: String, enum: [...DISMISS_REASONS, null], default: null },
+  duplicateOfCaseId: { type: ObjectId, ref: 'Case', default: null },
+  decidedBy: { type: ObjectId, ref: 'User', required: true },
+  decidedAt: { type: Date, required: true },
+};
+
+const decisionSchema = new mongoose.Schema(decisionFields, { _id: false });
+
+const decisionHistorySchema = new mongoose.Schema(
+  {
+    ...decisionFields,
+    reopenedBy: { type: ObjectId, ref: 'User', required: true },
+    reopenedAt: { type: Date, required: true },
+    reopenReason: { type: String, required: true, maxlength: 1000 },
   },
   { _id: false },
 );
@@ -76,19 +117,12 @@ const caseSchema = new mongoose.Schema(
     // Filled in Phase 5 (warning signals and related-case linking).
     signals: { type: [mongoose.Schema.Types.Mixed], default: [] },
     linkedCaseIds: { type: [ObjectId], default: [] },
-    // Filled in Phase 4: { type, basis, decidedBy, decidedAt }.
-    decision: {
-      type: new mongoose.Schema(
-        {
-          type: { type: String, required: true },
-          basis: { type: String, required: true, maxlength: 3000 },
-          decidedBy: { type: ObjectId, ref: 'User', required: true },
-          decidedAt: { type: Date, required: true },
-        },
-        { _id: false },
-      ),
-      default: null,
-    },
+    // Officer (or head) recommendation; staff-only.
+    recommendation: { type: recommendationSchema, default: null },
+    // Final TPO-head decision. Phase 5 reads confirmedIndicators/verifiedDomains to build the registry.
+    decision: { type: decisionSchema, default: null },
+    // Earlier decisions, moved here on reopen.
+    decisionHistory: { type: [decisionHistorySchema], default: [] },
     lastActivityAt: { type: Date, default: Date.now },
   },
   { timestamps: true },

@@ -62,3 +62,59 @@ export const EVIDENCE_RULES = Object.freeze({
   maxFilesPerUpload: 5,
   maxFilesPerCase: 10,
 })
+
+// Staff desk vocabulary (Phase 4).
+export const OPEN_STATUSES = Object.freeze(['submitted', 'under_review', 'awaiting_student'])
+
+export const STAFF_STATUS_LABELS = Object.freeze({
+  submitted: 'Submitted',
+  under_review: 'Under review',
+  awaiting_student: 'Awaiting student',
+  confirmed_fraud: 'Confirmed fraud',
+  verified_genuine: 'Verified genuine',
+  inconclusive: 'Inconclusive',
+  dismissed: 'Dismissed',
+})
+
+export const DECISION_TYPE_LABELS = Object.freeze({
+  confirmed_fraud: 'Confirmed fraud',
+  verified_genuine: 'Verified genuine',
+  inconclusive: 'Inconclusive',
+  dismissed: 'Dismissed',
+})
+
+// Plain-language outcome shown to students on a closed request.
+export const STUDENT_OUTCOME_COPY = Object.freeze({
+  confirmed_fraud: 'Your placement cell confirmed that this offer is fraudulent.',
+  verified_genuine: 'Your placement cell verified that this offer is genuine.',
+  inconclusive: 'Your placement cell could not verify this offer either way.',
+  dismissed: 'Your placement cell closed this request.',
+})
+
+export const DECISION_CHECK_LABELS = Object.freeze({
+  called_official_number: 'Called the official company number',
+  matched_official_domain: 'Matched the official company domain',
+  checked_official_careers_page: 'Checked the official careers page',
+  mca_or_gst_lookup: 'MCA or GST lookup',
+  contacted_company_hr: 'Contacted company HR',
+  prior_campus_drive: 'Company held a prior campus drive',
+  reviewed_student_evidence: 'Reviewed the student’s evidence',
+  other: 'Other',
+})
+
+export const DISMISS_REASON_LABELS = Object.freeze({
+  duplicate: 'Duplicate of another case',
+  not_an_opportunity: 'Not a job or internship offer',
+  insufficient_information: 'Insufficient information',
+  other: 'Other',
+})
+
+export const PRIORITY_LABELS = Object.freeze({ normal: 'Normal', high: 'High' })
+
+export const QUEUE_TABS = Object.freeze([
+  { value: 'open', label: 'Open' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'awaiting_student', label: 'Awaiting student' },
+  { value: 'closed', label: 'Closed' },
+])

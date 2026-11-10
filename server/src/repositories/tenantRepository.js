@@ -67,12 +67,15 @@ function createTenantRepository(Model) {
         assertNoCollegeIdChange(update);
         return Model.updateOne(scope(filter), update, { runValidators: true }).exec();
       },
-      /** Atomic update returning the new document. With upsert, the inserted document gets this collegeId. */
-      findOneAndUpdate(filter, update, { upsert = false } = {}) {
+      /**
+       * Atomic conditional update. Returns the document after (default) or before the update, or null
+       * when nothing matched. With upsert, the inserted document gets this collegeId.
+       */
+      findOneAndUpdate(filter, update, { upsert = false, returnDocument = 'after' } = {}) {
         assertNoCollegeIdChange(update);
         return Model.findOneAndUpdate(scope(filter), update, {
           upsert,
-          returnDocument: 'after',
+          returnDocument,
           runValidators: true,
           setDefaultsOnInsert: true,
         }).exec();

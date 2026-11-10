@@ -1,6 +1,6 @@
 # Data Model
 
-> **Status:** `colleges`, `users`, `auditlogs` (Phase 2) and `counters`, `cases`, `caseevents`, `evidences` + GridFS bucket `evidence` (Phase 3) are **implemented**. The case schema is final for Phases 4–5. Other collections are planned.
+> **Status:** `colleges`, `users`, `auditlogs` (Phase 2); `counters`, `cases`, `caseevents`, `evidences` + GridFS bucket `evidence` (Phase 3); `notes` and the case recommendation/decision/history fields (Phase 4) are **implemented**. Other collections are planned.
 
 ## Global rules
 
@@ -98,12 +98,14 @@ Indexes: unique `{ collegeId: 1, key: 1 }`.
 | `consentAt` | Date | required; set by the server when `consent: true` |
 | `status` | String | submitted (default), under_review, awaiting_student, confirmed_fraud, verified_genuine, inconclusive, dismissed; the last four are `CLOSED_STATUSES` |
 | `priority` | String | normal or high; high when money was requested or already paid |
-| `assigneeId` | ObjectId or null | Phase 4 |
+| `assigneeId` | ObjectId or null | active placement_officer or tpo_head of the same college |
 | `indicators` | [{ type: email/domain/phone/upi/url, value, source: student_entered/extracted }] | extracted at creation, extended on student replies (max 100) |
 | `signals` | [Mixed] | Phase 5 |
 | `linkedCaseIds` | [ObjectId] | Phase 5 |
-| `decision` | { type, basis, decidedBy, decidedAt } or null | Phase 4 |
-| `lastActivityAt` | Date | updated on create, reply and evidence upload |
+| `recommendation` | { type, basis, by, at } or null | staff-only; see Phase 4 below |
+| `decision` | object or null | final TPO-head decision; see Phase 4 below |
+| `decisionHistory` | [object] | earlier decisions moved here on reopen |
+| `lastActivityAt` | Date | updated on every student and staff action (create, reply, evidence, assign, status, info request, message, note, recommendation, decision, reopen) |
 | `createdAt`, `updatedAt` | Date | timestamps |
 
 Indexes: unique `{ collegeId, caseNumber }`; `{ collegeId, status, createdAt: -1 }`; `{ collegeId, studentId, createdAt: -1 }`; `{ collegeId, 'indicators.type', 'indicators.value' }`.
@@ -113,14 +115,14 @@ Indexes: unique `{ collegeId, caseNumber }`; `{ collegeId, status, createdAt: -1
 | Field | Type | Rules |
 | --- | --- | --- |
 | `collegeId`, `caseId` | ObjectId | required |
-| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened |
+| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened, recommendation_made (always `visibleToStudent=false`) |
 | `actorId`, `actorRole` | ObjectId, String | who acted |
 | `body` | String or null | ≤ 3000 |
 | `visibleToStudent` | Boolean | **required, no default** — every writer decides explicitly |
 | `metadata` | Object | e.g. `{ from, to }`, `{ count, names }` |
 | `createdAt` | Date | no updatedAt |
 
-Indexes: `{ collegeId, caseId, createdAt }`. Internal staff notes are **not** stored here (separate collection in Phase 4).
+Indexes: `{ collegeId, caseId, createdAt }`. Internal staff notes are **not** stored here (see `notes`). Student responses never include event `metadata` (it can hold staff-only data such as a reopen reason).
 
 ### `evidences` — model `Evidence` (bytes in GridFS)
 
@@ -145,12 +147,50 @@ Bucket `evidence` → collections `evidence.files` and `evidence.chunks` (defaul
 
 Create case → create `created` event (on failure the case is deleted). Evidence: validate all files → store each in GridFS → create its `Evidence` doc → `evidence_added` event (on any failure, this request's Evidence docs and GridFS files are deleted).
 
+## Implemented in Phase 4
+
+### `notes` — model `Note` (staff-only, append-only)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId`, `caseId` | ObjectId | required |
+| `authorId` | ObjectId → User | required |
+| `authorRole` | String | placement_officer or tpo_head |
+| `body` | String | 1–5000 |
+| `createdAt` | Date | no updatedAt |
+
+Indexes: `{ collegeId, caseId, createdAt }`. Same append-only plugin as `auditlogs` (`models/plugins/appendOnly.js`): updates, replaces, deletes, bulkWrite and re-saves throw. A separate collection so that no student-facing query can read it.
+
+### Case: recommendation, decision and history
+
+`recommendation` (officer or head; replaced on each new recommendation):
+
+| Field | Type |
+| --- | --- |
+| `type` | confirmed_fraud, verified_genuine, inconclusive or dismissed |
+| `basis` | String, 10–2000 |
+| `by`, `at` | ObjectId → User, Date |
+
+`decision` (TPO head only; its `type` is the final status it sets):
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `type` | String | one of the four final statuses |
+| `basis` | String | staff-only; 30–3000 for confirmed_fraud and verified_genuine, else 10–3000 |
+| `checks` | [String] | called_official_number, matched_official_domain, checked_official_careers_page, mca_or_gst_lookup, contacted_company_hr, prior_campus_drive, reviewed_student_evidence, other; at least 1 for confirmed_fraud and verified_genuine |
+| `studentMessage` | String | 10–1000; the only decision text students see |
+| `confirmedIndicators` | [{ type, value }] | confirmed_fraud only, at least 1; each must equal (type + normalised value) an indicator on the case. **Phase 5 builds the registry from this.** |
+| `verifiedDomains` | [String] | verified_genuine only, optional; each must be a domain indicator on the case. **Read by Phase 5.** |
+| `dismissReason` | String or null | dismissed only: duplicate, not_an_opportunity, insufficient_information, other |
+| `duplicateOfCaseId` | ObjectId or null | required for duplicate; another case of the same college |
+| `decidedBy`, `decidedAt` | ObjectId → User, Date | |
+
+`decisionHistory`: array of earlier decisions (all fields above) plus `reopenedBy`, `reopenedAt`, `reopenReason` (10–1000, staff-only). Reopen moves the current decision here and sets `decision` to null.
+
 ## Planned collections
 
 | Collection | Phase | Purpose | Key fields |
 | --- | --- | --- | --- |
-| `notes` | 4 | Staff-only internal notes | `collegeId`, `caseId`, `authorId`, `body`, `editedAt` |
-| `decisions` | 4 | Final TPO decision with reasons | `collegeId`, `caseId`, `outcome` (verified_genuine/confirmed_suspicious/inconclusive), `reason`, `decidedBy`, `decidedAt` |
 | `recruiters` | 5 | Reviewed recruiter records | `collegeId`, `name`, `officialDomains[]`, `status`, `sourceCaseIds[]`, `reviewedBy` |
 | `indicators` | 5 | Confirmed suspicious indicators | `collegeId`, `type`, `value`, `normalizedValue` (indexed), `recruiterId`, `sourceCaseId`, `decisionId`, `active` |
 | `advisories` | 6 | TPO-published advisories | `collegeId`, `title`, `body`, `severity`, `audience`, `publishedBy`, `status` |

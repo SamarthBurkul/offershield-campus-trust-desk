@@ -11,7 +11,9 @@ function navLinksFor(user) {
   if (STAFF_ROLES.includes(user.role)) {
     return [
       { to: '/staff', label: 'Home', end: true },
+      { to: '/staff/cases', label: 'Case desk' },
       { to: '/staff/members', label: 'Staff' },
+      ...(user.role === ROLES.TPO_HEAD ? [{ to: '/staff/audit', label: 'Audit log' }] : []),
     ]
   }
   return [

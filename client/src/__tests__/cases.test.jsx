@@ -217,7 +217,8 @@ describe('RequestDetailPage', () => {
 
     renderAt('/student/requests/case1')
 
-    expect(await screen.findByText('Verified by placement cell')).toBeInTheDocument()
+    // Shown in the header badge and on the outcome card.
+    expect((await screen.findAllByText('Verified by placement cell')).length).toBeGreaterThan(0)
     await waitFor(() => expect(screen.queryByLabelText('Reply to your placement cell')).not.toBeInTheDocument())
     expect(screen.queryByLabelText('Add more evidence')).not.toBeInTheDocument()
     expect(screen.getByText(/replies are turned off/i)).toBeInTheDocument()

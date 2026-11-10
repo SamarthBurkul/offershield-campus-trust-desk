@@ -128,6 +128,56 @@ Students only receive `toStudentCaseView` / `toStudentCaseSummary` / `toStudentE
 - Closed cases accept no replies or evidence (`409 CASE_CLOSED`).
 - Audit: `case.create`, `case.student_message`, `evidence.upload`, `evidence.access`.
 
+## Implemented in Phase 4
+
+### Internal notes are a separate collection
+
+Staff notes live in `notes` (append-only, same plugin as the audit log). No student-facing route, service or serializer imports the Note model or `noteRepository`; notes are never joined into, embedded in or serialized with student data. Recommendations live on the case but are only serialized by `toStaffCaseView`, and `recommendation_made` events are always `visibleToStudent=false`.
+
+### Serializer rules
+
+| Field | Staff (`toStaffCaseView`) | Student (`toStudentCaseView`) |
+| --- | --- | --- |
+| Offer, contacts, money, indicators, status | yes | yes |
+| priority, isStale, assignee, student identity | yes | no |
+| recommendation | yes | no |
+| decision | full (basis, checks, indicators, domains, dismiss reason, duplicate, decidedBy) | only `{ type, decidedAt, message }` |
+| decisionHistory, reopen reasons | yes | no |
+| signals, linkedCaseIds | yes | no |
+| events | all, with `visibleToStudent`, actor and metadata | only `visibleToStudent=true`, no metadata, actor reduced to student/placement_cell/system |
+| notes | yes (separate array) | never |
+| evidence | name, mime, size, sha256, metadataStripped | name, mime, size |
+| gridFsId | never | never |
+
+Tests serialize the student response to JSON and assert note text, recommendation basis, decision basis, checks, `decidedBy` and the reopen reason are absent.
+
+### Decision authority
+
+Only `tpo_head` may record decisions (all four types) and reopen cases (route-level `requireRole('tpo_head')`; officers get 403). Officers and heads can recommend. See ADR-024.
+
+### Atomic state transitions
+
+`services/caseStateMachine.js` defines which trigger may move which status to which. Every transition is one `findOneAndUpdate` through the tenant repository with `status: { $in: allowedFrom }` in the filter. If nothing matches: 404 when the case is not in this college, otherwise 409 (`CASE_CLOSED` or `INVALID_TRANSITION`). Two concurrent decisions therefore cannot both succeed (tested with `Promise.all`). Final statuses can only be produced by the decision trigger; the status endpoint's schema accepts only `under_review`; reopen is the only way out of a final status and also matches the current `decision.decidedAt` (ADR-027).
+
+### Tenant isolation on the desk
+
+`collegeId` always comes from `req.user`. Every `/staff/cases/:id*` endpoint returns 404 for another college's case and leaves it unchanged (table-driven test). Queue, counts and search are scoped by the tenant repository, so another college's case is invisible even by exact case number or indicator. Assignees and duplicate-of cases are looked up inside the tenant.
+
+### Audit actions (Phase 4)
+
+| Action | Metadata (never free text) |
+| --- | --- |
+| `case.assign` | from, to (user ids), statusChanged |
+| `case.status_change` | from, to |
+| `case.info_request` | from (previous status) |
+| `case.staff_message` | length |
+| `case.note_add` | noteId, length — never the body |
+| `case.recommend` | type — never the basis |
+| `case.decision` | type, checks, confirmedIndicatorCount, verifiedDomainCount, dismissReason — never the basis or student message |
+| `case.reopen` | previousStatus, previousDecisionType — never the reason |
+
+`GET /staff/audit` is TPO-head only and tenant-scoped; entries remain append-only.
+
 ## Known limitations
 
 - **No email OTP verification in the MVP.** Student registration is controlled by the college email domain plus the college's join code (the pilot control, ADR-012). Someone who knows the join code could register with an address on the college's domain that they do not own. Mitigations: rotate the join code, disable accounts, add email verification later.
@@ -137,6 +187,8 @@ Students only receive `toStudentCaseView` / `toStudentCaseSummary` / `toStudentE
 - PDFs are not sanitised (they may carry author metadata or active content); they are only downloaded as attachments under `CSP: sandbox` and opened in the user's own viewer.
 - Images are not decoded or re-encoded: metadata segments are removed, but pixel content (e.g. a visible ID card in a screenshot) is not inspected. Students are asked to crop IDs out.
 - No malware scanning of uploads in the MVP.
+- Decisions are recorded by a single TPO head; there is no second-person approval (ADR-024).
+- Reopening a case does not yet revoke registry entries — there is no registry until Phase 5, which must revoke entries created from a reopened decision.
 - The privacy guard detects PAN and Aadhaar formats only; other identifiers (passport, voter ID, bank account numbers) are not detected.
 
 ## Rules for later phases (mandatory)

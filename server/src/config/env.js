@@ -62,6 +62,7 @@ const envSchema = z
     AUTH_RATE_LIMIT_WINDOW_MS: positiveInt(15 * 60 * 1000),
     AUTH_RATE_LIMIT_MAX: positiveInt(10),
     CASE_CREATE_LIMIT_PER_HOUR: positiveInt(10),
+    CASE_STALE_DAYS: z.coerce.number().int().min(1).max(365).default(3),
     EVIDENCE_LINK_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
     // Used only by the seed scripts.
     SEED_SUPERADMIN_EMAIL: optionalString,
@@ -123,6 +124,7 @@ function loadConfig(envObject = {}) {
     }),
     caseCreateLimitPerHour: env.CASE_CREATE_LIMIT_PER_HOUR,
     evidenceLinkTtlSeconds: env.EVIDENCE_LINK_TTL_SECONDS,
+    caseStaleDays: env.CASE_STALE_DAYS,
     mongodbUri: env.MONGODB_URI,
     jwtSecret: env.JWT_SECRET,
     jwtExpiresInSeconds: env.JWT_EXPIRES_IN,

@@ -35,7 +35,10 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | 400 | `NO_FILES` | Upload without any file in the `files` field |
 | 400 | `INVALID_UPLOAD` | Malformed multipart body or unexpected fields |
 | 401 | `LINK_INVALID` | Evidence link expired, tampered, or issued to a different user |
-| 409 | `CASE_CLOSED` | Reply or upload on a closed case |
+| 400 | `INVALID_ASSIGNEE` | Assignee is not an active placement officer / TPO head of the caller's college |
+| 400 | `INDICATOR_NOT_ON_CASE` | A confirmed indicator or verified domain is not one of the case's indicators |
+| 409 | `CASE_CLOSED` | Reply, upload, staff message, info request, assignment or recommendation on a closed case |
+| 409 | `INVALID_TRANSITION` | The case is not in a status that allows this action (e.g. a concurrent decision won) |
 | 413 | `FILE_TOO_LARGE` | An evidence file is over 3 MB |
 | 401 | `UNAUTHENTICATED` | No/invalid session |
 | 401 | `INVALID_CREDENTIALS` | Login failed (unknown email, wrong password, disabled user, suspended college — identical body) |
@@ -94,6 +97,18 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | POST | `/cases/:id/messages` | student (owner) | 201 | 400 `VALIDATION_ERROR` / `SENSITIVE_ID_DETECTED`, 401, 403, 404, 409 `CASE_CLOSED` |
 | POST | `/cases/:id/evidence` | student (owner) | 201 | 400 `UNSUPPORTED_FILE_TYPE` / `TOO_MANY_FILES` / `NO_FILES` / `INVALID_UPLOAD`, 401, 403, 404, 409, 413 `FILE_TOO_LARGE` |
 | POST | `/cases/:id/evidence/:evidenceId/link` | student (owner), placement_officer, tpo_head (same college) | 200 | 401, 403 (super admin, other roles), 404 |
+| GET | `/staff/cases` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| GET | `/staff/cases/counts` | placement_officer, tpo_head | 200 | 401, 403 |
+| GET | `/staff/cases/:id` | placement_officer, tpo_head | 200 | 401, 403, 404 |
+| PATCH | `/staff/cases/:id/assign` | officer (self only), tpo_head | 200 | 400 `VALIDATION_ERROR` / `INVALID_ASSIGNEE`, 401, 403, 404, 409 `CASE_CLOSED` |
+| PATCH | `/staff/cases/:id/status` | placement_officer, tpo_head | 200 | 400, 401, 403, 404, 409 `INVALID_TRANSITION` / `CASE_CLOSED` |
+| POST | `/staff/cases/:id/info-request` | placement_officer, tpo_head | 201 | 400, 401, 403, 404, 409 `CASE_CLOSED` |
+| POST | `/staff/cases/:id/messages` | placement_officer, tpo_head | 201 | 400, 401, 403, 404, 409 `CASE_CLOSED` |
+| POST | `/staff/cases/:id/notes` | placement_officer, tpo_head | 201 | 400, 401, 403, 404 |
+| POST | `/staff/cases/:id/recommendation` | placement_officer, tpo_head | 200 | 400, 401, 403, 404, 409 `CASE_CLOSED` |
+| POST | `/staff/cases/:id/decision` | tpo_head | 200 | 400 `VALIDATION_ERROR` / `INDICATOR_NOT_ON_CASE`, 401, 403, 404, 409 `INVALID_TRANSITION` |
+| POST | `/staff/cases/:id/reopen` | tpo_head | 200 | 400, 401, 403, 404, 409 `INVALID_TRANSITION` |
+| GET | `/staff/audit` | tpo_head | 200 | 400, 401, 403 |
 | GET | `/files/:token` | the user the link was issued to (session required) | 200 (file stream) | 401 `UNAUTHENTICATED` / `LINK_INVALID`, 404 |
 
 Any authenticated route can also return `403 PASSWORD_CHANGE_REQUIRED` (except the three allowed auth routes).
@@ -203,7 +218,7 @@ All `/cases` routes require a session and the `student` role (plus a tenant); th
 }
 ```
 
-Never included: `assigneeId`, `priority`, `signals`, `linkedCaseIds`, `studentId`, `collegeId`, `decision.decidedBy`. `decision` (Phase 4) is `{ type, basis, decidedAt }` or null.
+Never included: `assigneeId`, `priority`, `signals`, `linkedCaseIds`, `studentId`, `collegeId`, `recommendation`, `decisionHistory`, notes, and the decision's `basis`, `checks`, `confirmedIndicators`, `verifiedDomains`, `dismissReason`, `duplicateOfCaseId` and `decidedBy`. `decision` is `{ type, decidedAt, message }` (message = the TPO head's `studentMessage`) or null.
 
 #### `POST /cases`
 
@@ -231,7 +246,7 @@ Own cases, newest first. `status` optional (one of the case statuses), `page` �
 
 #### `GET /cases/:id`
 
-`200 { "case": StudentCaseView, "events": [...], "evidence": [{ id, originalName, mime, size, createdAt }] }`. `events` are only those with `visibleToStudent: true`, oldest first, shaped `{ id, type, actor: "student" or "placement_cell" or "system", body, metadata, createdAt }` (staff identities are not exposed; metadata limited to `from/to` and `count/names`).
+`200 { "case": StudentCaseView, "events": [...], "evidence": [{ id, originalName, mime, size, createdAt }] }`. `events` are only those with `visibleToStudent: true`, oldest first, shaped `{ id, type, actor: "student" or "placement_cell" or "system", body, createdAt }`. Staff identities and event `metadata` are never sent to students (Phase 4).
 
 #### `POST /cases/:id/messages`
 
@@ -259,11 +274,72 @@ Requires **both** the link token and a valid session of the same user (`uid`), w
 
 No session → 401 `UNAUTHENTICATED`; expired/tampered/other user's token → 401 `LINK_INVALID`; evidence gone → 404. Each successful download is audited as `evidence.access`.
 
+### Staff investigation desk (Phase 4)
+
+All routes are under `/staff` (authenticate → enforcePasswordChange → requireTenant) and then `requireRole('placement_officer', 'tpo_head')`; `decision`, `reopen` and `audit` are `tpo_head` only. Students and the super admin get 403. Any `:id` that is not a case of the caller's college → 404 on every endpoint. Bodies and queries are strict. Every mutation answers with the refreshed **StaffCaseView** (`{ "case": … }`), writes its CaseEvent and audit entry after the atomic update succeeds, and updates `lastActivityAt`.
+
+#### `GET /staff/cases`
+
+| Query | Values |
+| --- | --- |
+| `status` | a case status, `open` or `closed` |
+| `priority` | normal, high |
+| `assignee` | `me`, `unassigned` or a user id |
+| `channel` | a channel |
+| `q` | matches exact caseNumber (case-insensitive), a claimedCompany substring (regex characters escaped), or an indicator value equal to `q` run through the phone/domain/email/UPI/URL normalisers (so `98765 43210` finds `+919876543210`) |
+| `from`, `to` | createdAt range |
+| `sort` | lastActivity (default), created, priority |
+| `page`, `limit` | limit 1–50, default 20 |
+
+Response `{ cases: [{ id, caseNumber, claimedCompany, roleTitle, channel, status, priority, student: { name, year, branch }, assignee: { id, name } or null, evidenceCount, lastActivityAt, createdAt, isStale }], page, limit, total }`. `isStale` = open and `lastActivityAt` older than `CASE_STALE_DAYS` (default 3).
+
+#### `GET /staff/cases/counts`
+
+`{ counts: { submitted, under_review, awaiting_student, open, closed, unassignedOpen, staleOpen } }`.
+
+#### `GET /staff/cases/:id` — StaffCaseView
+
+All case fields plus `priority`, `isStale`, `student { id, name, email, year, branch }`, `assignee`, `recommendation { type, basis, by, at }`, `decision` (full, with `decidedBy { id, name, role }`), `decisionHistory` (with `reopenedBy`, `reopenedAt`, `reopenReason`), `signals`, `linkedCaseIds`, `events` (all, each with `visibleToStudent`, `actor`, `metadata`), `notes` (separate array) and `evidence` (`id, originalName, mime, size, sha256, metadataStripped, createdAt` — never `gridFsId`).
+
+#### `PATCH /staff/cases/:id/assign` — `{ "assigneeId": "<id>" or null }`
+
+Assignee must be an active placement_officer/tpo_head of the same college (else 400 `INVALID_ASSIGNEE`; other colleges' users are simply not found). Officers may only assign themselves or release their own assignment (403 otherwise). Assigning a `submitted` case atomically moves it to `under_review` with a visible `status_changed` event. Writes an internal `assigned` event. Audit `case.assign`.
+
+#### `PATCH /staff/cases/:id/status` — `{ "status": "under_review", "reason"? }`
+
+Only `submitted` or `awaiting_student` → `under_review`; any other value fails validation (final statuses can never be set here). Visible `status_changed` event with a generic body. Audit `case.status_change`.
+
+#### `POST /staff/cases/:id/info-request` — `{ "message": "10–2000" }`
+
+Open case → `awaiting_student`; visible `info_requested` event with the message. Audit `case.info_request`. Closed → 409 `CASE_CLOSED`.
+
+#### `POST /staff/cases/:id/messages` — `{ "body": "1–3000" }`
+
+Visible `staff_message`; status unchanged. Closed → 409. Audit `case.staff_message`.
+
+#### `POST /staff/cases/:id/notes` — `{ "body": "1–5000" }`
+
+Creates a staff-only Note (open or closed cases). Audit `case.note_add` (metadata: note id and length only).
+
+#### `POST /staff/cases/:id/recommendation` — `{ "type", "basis": "10–2000" }`
+
+Open cases only; replaces any previous recommendation; internal `recommendation_made` event. Audit `case.recommend`.
+
+#### `POST /staff/cases/:id/decision` (tpo_head)
+
+`{ type, basis, checks, studentMessage, confirmedIndicators?, verifiedDomains?, dismissReason?, duplicateOfCaseId? }` — rules in DATA_MODEL.md. One atomic update (`status ∈ open statuses`) sets the status, `decision` and `lastActivityAt`; the assignee is kept. Then a visible `decision_recorded` event (body = studentMessage only) and a visible `status_changed` event. Audit `case.decision` with `{ type, checks, confirmedIndicatorCount, verifiedDomainCount, dismissReason }` — never the basis or message. Concurrent decisions: exactly one 200, the other 409 `INVALID_TRANSITION`. No registry entries are created here (Phase 5).
+
+#### `POST /staff/cases/:id/reopen` (tpo_head) — `{ "reason": "10–1000" }`
+
+Final status only (else 409). Pushes the current decision to `decisionHistory` with `reopenedBy/At/Reason`, sets `decision=null` and `under_review`. Visible `reopened` event with the generic body "Your request has been reopened for further review."; the reason is kept in event metadata (never sent to students). Audit `case.reopen` `{ previousStatus, previousDecisionType }`.
+
+#### `GET /staff/audit` (tpo_head)
+
+Query `action`, `entityType`, `entityId`, `actorId`, `from`, `to`, `page`, `limit` (≤ 100, default 25). College-scoped, newest first. `{ entries: [{ id, actor: { id, name, role }, action, entity: { type, id }, metadata, createdAt }], page, limit, total }`.
+
 ## Planned route groups (not implemented)
 
 | Group | Phase | Purpose |
 | --- | --- | --- |
-| `/api/v1/staff/cases/*` (indicative) | 4 | Staff case desk, assignment, internal notes, info requests, decisions |
 | `/api/v1/registry/*`, `/api/v1/lookup` | 5 | Registry, student lookup, linking, warning signals |
 | `/api/v1/advisories`, `/api/v1/notifications`, `/api/v1/stats` | 6 | Advisories, notifications, statistics |
-| `/api/v1/audit-logs` | 4 | Read-only audit trail for the TPO head |

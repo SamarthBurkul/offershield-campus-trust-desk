@@ -137,3 +137,33 @@
 - **Context:** `gmail.com` and similar providers appear in genuine and fraudulent messages alike; recording them as domains would create meaningless registry matches in Phase 5.
 - **Decision:** `services/indicators/freeMailDomains.js` lists 15 public providers; their domains are not added as `domain` indicators. The full email address is still recorded as an `email` indicator.
 - **Consequence:** Domain indicators point at recruiter-controlled domains only. The list is easy to extend.
+
+## ADR-024: Final decisions are TPO-head only in the MVP; officers recommend
+
+- **Context:** A recorded decision tells a student an offer is fraudulent or genuine and (Phase 5) feeds the college registry; mistakes have real consequences.
+- **Decision:** Only `tpo_head` can record decisions (all four types) and reopen cases. Placement officers (and heads) can add a recommendation `{ type, basis }`, shown to all staff but never to students.
+- **Consequence:** A clear single point of accountability; officers' work is visible to the head. A college with one TPO head has a bottleneck; delegation or two-person approval can be added later.
+
+## ADR-025: Decisions store confirmed indicators and verified domains for Phase 5
+
+- **Context:** The registry (Phase 5) must contain only findings an authorised person confirmed, traceable to a decision.
+- **Decision:** `decision.confirmedIndicators` (confirmed_fraud) and `decision.verifiedDomains` (verified_genuine) must exactly match indicators already on the case. The decision endpoint does **not** write registry entries; Phase 5 reads these fields.
+- **Consequence:** No free-text indicators can enter the registry, and Phase 4 stays registry-free. Phase 5 must handle backfilling from existing decisions and revocation on reopen.
+
+## ADR-026: Decisions allowed from any open status
+
+- **Context:** Some cases are obvious (e.g. an exact repeat of a confirmed scam) and do not need assignment or review first.
+- **Decision:** The decision trigger accepts `submitted`, `under_review` and `awaiting_student`.
+- **Consequence:** Faster handling of clear cases; the audit log and timeline still record who decided and when. Policy can tighten this later in the state machine table alone.
+
+## ADR-027: Atomic conditional updates for concurrency
+
+- **Context:** Two staff members can act on the same case at the same time (e.g. two decisions, or a decision while the student replies).
+- **Decision:** Every status change is a single `findOneAndUpdate` whose filter includes `status: { $in: allowedFrom }` (and, for reopen, the current `decision.decidedAt`). No match → 409 (or 404 if the case is not in the tenant). Events and audit entries are written only after the update succeeds.
+- **Consequence:** No lost updates or double decisions without needing transactions; the UI shows "This case was updated by someone else — refresh". Events/audit are not in the same atomic unit as the update, so a crash in between could leave a status change without its event (acceptable for the MVP).
+
+## ADR-028: Reopen keeps decision history
+
+- **Context:** New evidence can arrive after a decision; the original decision and its basis must remain reviewable.
+- **Decision:** Reopen (TPO head, with a staff-only reason) pushes the current decision into `decisionHistory` with `reopenedBy/At/Reason`, sets `decision=null` and returns the case to `under_review`. The student sees only a generic "reopened" message.
+- **Consequence:** Full history is kept on the case and in the audit log. Phase 5 must revoke registry entries derived from a reopened decision.

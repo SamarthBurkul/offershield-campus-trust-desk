@@ -225,7 +225,9 @@ describe('GET /cases/mine and /cases/:id', () => {
     for (const key of ['assigneeId', 'signals', 'linkedCaseIds', 'priority', 'studentId', 'collegeId']) {
       expect(res.body.case).not.toHaveProperty(key);
     }
-    expect(res.body.case.decision).toEqual({ type: 'confirmed_fraud', basis: 'Registry match', decidedAt: expect.any(String) });
+    // Phase 4 contract: students only get { type, decidedAt, message }.
+    expect(res.body.case.decision).toEqual({ type: 'confirmed_fraud', decidedAt: expect.any(String), message: null });
+    expect(res.text).not.toContain('Registry match');
     expect(res.text).not.toContain('STAFF ONLY');
     expect(res.text).not.toContain(String(ctx.alpha.officer._id));
     expect(res.text).not.toContain(String(ctx.alpha.head._id));
@@ -247,7 +249,9 @@ describe('POST /cases/:id/messages', () => {
     await Case.updateOne({ _id: created.id }, { status: 'awaiting_student' });
     const answer = await agent.post(`/api/v1/cases/${created.id}/messages`).send({ body: 'Answering your question.' });
     expect(answer.body.case.status).toBe('under_review');
-    expect(answer.body.events.at(-1)).toMatchObject({ type: 'status_changed', metadata: { from: 'awaiting_student', to: 'under_review' } });
+    expect(answer.body.events.at(-1)).toMatchObject({ type: 'status_changed', body: expect.stringMatching(/under review/) });
+    // Phase 4 contract: event metadata is never sent to students.
+    expect(answer.body.events.every((event) => !('metadata' in event))).toBe(true);
 
     await Case.updateOne({ _id: created.id }, { status: 'dismissed' });
     const closed = await agent.post(`/api/v1/cases/${created.id}/messages`).send({ body: 'Anything?' });
