@@ -6,6 +6,8 @@ const { createAuthRouter } = require('./auth.routes');
 const { createAdminRouter } = require('./admin.routes');
 const { createCollegeRouter } = require('./college.routes');
 const { createStaffRouter } = require('./staff.routes');
+const { createCaseRouter } = require('./case.routes');
+const { createFileRouter } = require('./file.routes');
 const { createAuthenticate } = require('../middleware/authenticate');
 
 /**
@@ -21,6 +23,8 @@ function createApiRouter(config) {
   router.use('/admin', createAdminRouter(deps));
   router.use('/college', createCollegeRouter(deps));
   router.use('/staff', createStaffRouter(deps));
+  router.use('/cases', createCaseRouter(deps));
+  router.use('/files', createFileRouter(deps));
 
   return router;
 }

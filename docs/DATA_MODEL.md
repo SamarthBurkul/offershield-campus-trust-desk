@@ -1,6 +1,6 @@
 # Data Model
 
-> **Status:** `colleges`, `users` and `auditLogs` are **implemented (Phase 2)**. All other collections are planned; their field lists are indicative and will be finalised in the phase that implements them.
+> **Status:** `colleges`, `users`, `auditlogs` (Phase 2) and `counters`, `cases`, `caseevents`, `evidences` + GridFS bucket `evidence` (Phase 3) are **implemented**. The case schema is final for Phases 4–5. Other collections are planned.
 
 ## Global rules
 
@@ -64,13 +64,91 @@ Indexes: `collegeId`; `{ collegeId: 1, createdAt: -1 }`.
 
 **Append-only:** pre-hooks throw on `updateOne`, `updateMany`, `findOneAndUpdate`, `findOneAndReplace`, `findOneAndDelete`, `replaceOne`, `deleteOne`, `deleteMany`, `bulkWrite` and on re-saving an existing document. No API route reads, updates or deletes audit entries yet.
 
+## Implemented collections (Phase 3)
+
+Shared enums live in `server/src/constants/caseStatus.js` (`CASE_STATUSES`, `CLOSED_STATUSES`, `CHANNELS`, `MONEY_PURPOSES`, `CASE_EVENT_TYPES`, `EVIDENCE_LIMITS`).
+
+### `counters` — model `Counter`
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId` | ObjectId → College | required |
+| `key` | String | e.g. `case` |
+| `seq` | Number | incremented atomically (`findOneAndUpdate` + `$inc` + upsert) |
+
+Indexes: unique `{ collegeId: 1, key: 1 }`.
+
+### `cases` — model `Case`
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId` | ObjectId | required (from session) |
+| `caseNumber` | String | `OS-<COLLEGE CODE UPPERCASE>-<seq, 4+ digits>`, e.g. `OS-DEMO-ALPHA-0001`; unique per college |
+| `studentId` | ObjectId → User | required (from session) |
+| `claimedCompany` | String | 2–120 |
+| `roleTitle` | String or null | ≤ 120 |
+| `channel` | String | whatsapp, telegram, email, linkedin, instagram, job_portal, sms, phone_call, other |
+| `receivedAt` | Date | not in the future (5 min clock-skew allowance) |
+| `messageText` | String | 10–5000 |
+| `links` | [String] | ≤ 10, http/https only, ≤ 500 chars; **stored as text, never fetched** |
+| `contacts` | { emails[] ≤5, phones[] ≤5, upiIds[] ≤5 } | as entered (emails/UPI lowercased) |
+| `moneyRequested` | { requested: Boolean, amount: Number ≥0 or null, purpose: enum or null } | amount/purpose forced to null when not requested |
+| `paidAlready`, `documentsShared` | Boolean | documentsShared is yes/no only |
+| `studentNote` | String or null | ≤ 2000 |
+| `consentAt` | Date | required; set by the server when `consent: true` |
+| `status` | String | submitted (default), under_review, awaiting_student, confirmed_fraud, verified_genuine, inconclusive, dismissed; the last four are `CLOSED_STATUSES` |
+| `priority` | String | normal or high; high when money was requested or already paid |
+| `assigneeId` | ObjectId or null | Phase 4 |
+| `indicators` | [{ type: email/domain/phone/upi/url, value, source: student_entered/extracted }] | extracted at creation, extended on student replies (max 100) |
+| `signals` | [Mixed] | Phase 5 |
+| `linkedCaseIds` | [ObjectId] | Phase 5 |
+| `decision` | { type, basis, decidedBy, decidedAt } or null | Phase 4 |
+| `lastActivityAt` | Date | updated on create, reply and evidence upload |
+| `createdAt`, `updatedAt` | Date | timestamps |
+
+Indexes: unique `{ collegeId, caseNumber }`; `{ collegeId, status, createdAt: -1 }`; `{ collegeId, studentId, createdAt: -1 }`; `{ collegeId, 'indicators.type', 'indicators.value' }`.
+
+### `caseevents` — model `CaseEvent`
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId`, `caseId` | ObjectId | required |
+| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened |
+| `actorId`, `actorRole` | ObjectId, String | who acted |
+| `body` | String or null | ≤ 3000 |
+| `visibleToStudent` | Boolean | **required, no default** — every writer decides explicitly |
+| `metadata` | Object | e.g. `{ from, to }`, `{ count, names }` |
+| `createdAt` | Date | no updatedAt |
+
+Indexes: `{ collegeId, caseId, createdAt }`. Internal staff notes are **not** stored here (separate collection in Phase 4).
+
+### `evidences` — model `Evidence` (bytes in GridFS)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId`, `caseId`, `uploadedBy` | ObjectId | required |
+| `originalName` | String | sanitised: basename only, `[A-Za-z0-9 _-]`, extension of the detected type, ≤ 100 |
+| `mime` | String | image/png, image/jpeg or application/pdf — detected from magic bytes |
+| `size` | Number | bytes as stored (after metadata stripping) |
+| `sha256` | String | hash of the stored bytes |
+| `gridFsId` | ObjectId | file in bucket `evidence` |
+| `metadataStripped` | Boolean | true for PNG/JPEG, false for PDF |
+| `createdAt` | Date | |
+
+Indexes: `{ collegeId, caseId, createdAt }`.
+
+### GridFS layout
+
+Bucket `evidence` → collections `evidence.files` and `evidence.chunks` (default 255 KB chunks). Each `evidence.files` document has `filename` (sanitised name) and `metadata: { collegeId, caseId, uploadedBy, contentType }`. Files are only ever reached through an `Evidence` record found via the tenant repository; there is no route that addresses GridFS ids directly.
+
+### Write order (no transactions)
+
+Create case → create `created` event (on failure the case is deleted). Evidence: validate all files → store each in GridFS → create its `Evidence` doc → `evidence_added` event (on any failure, this request's Evidence docs and GridFS files are deleted).
+
 ## Planned collections
 
 | Collection | Phase | Purpose | Key fields |
 | --- | --- | --- | --- |
-| `cases` | 3 | Student verification requests | `collegeId`, `caseNumber` (unique per college), `studentId`, `assignedOfficerId`, `status`, `offer` (`recruiterName`, `claimedCompany`, `roleTitle`, `channel`, `contactEmails[]`, `contactPhones[]`, `websiteUrls[]` (text only, never fetched), `paymentRequested`, `amountRequested`), `description`, `extractedIndicators[]` |
-| `evidence` | 3 | Evidence metadata; file bytes in GridFS (ADR-016) | `collegeId`, `caseId`, `uploadedBy`, `gridFsId`, `originalName`, `mimeType`, `sizeBytes`, `sha256` |
-| `caseEvents` | 4 | Student-visible case timeline | `collegeId`, `caseId`, `type`, `actorId`, `actorRole`, `message` |
 | `notes` | 4 | Staff-only internal notes | `collegeId`, `caseId`, `authorId`, `body`, `editedAt` |
 | `decisions` | 4 | Final TPO decision with reasons | `collegeId`, `caseId`, `outcome` (verified_genuine/confirmed_suspicious/inconclusive), `reason`, `decidedBy`, `decidedAt` |
 | `recruiters` | 5 | Reviewed recruiter records | `collegeId`, `name`, `officialDomains[]`, `status`, `sourceCaseIds[]`, `reviewedBy` |
@@ -82,6 +160,5 @@ Indexes: `collegeId`; `{ collegeId: 1, createdAt: -1 }`.
 ## Key indexes (planned)
 
 - `{ collegeId: 1, ... }` as the leading key on every college-owned collection.
-- `cases`: `{ collegeId: 1, caseNumber: 1 }` unique; `{ collegeId: 1, studentId: 1 }`; `{ collegeId: 1, status: 1 }`.
 - `indicators`: `{ collegeId: 1, type: 1, normalizedValue: 1 }`.
 - `acknowledgements`: `{ advisoryId: 1, userId: 1 }` unique.

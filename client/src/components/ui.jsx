@@ -115,3 +115,36 @@ export function OneTimeSecret({ label, value, onDismiss }) {
     </div>
   )
 }
+
+export function TextAreaField({ label, hint, rows = 5, ...textareaProps }) {
+  const id = useId()
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        rows={rows}
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        {...textareaProps}
+      />
+      {hint && <p className="text-xs text-slate-500">{hint}</p>}
+    </div>
+  )
+}
+
+export function CheckboxField({ label, hint, ...inputProps }) {
+  const id = useId()
+  return (
+    <div className="flex items-start gap-2">
+      <input id={id} type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700" {...inputProps} />
+      <div>
+        <label htmlFor={id} className="text-sm text-slate-800">
+          {label}
+        </label>
+        {hint && <p className="text-xs text-slate-500">{hint}</p>}
+      </div>
+    </div>
+  )
+}

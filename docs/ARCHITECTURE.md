@@ -52,6 +52,8 @@ Routers are built per app instance (`createApp(config)`), so tests can create ap
 | `/admin` | `authenticate`, `enforcePasswordChange`, `requireRole('super_admin')` |
 | `/college` | `authenticate`, `enforcePasswordChange`, `requireTenant` |
 | `/staff` | `authenticate`, `enforcePasswordChange`, `requireTenant`, then per route `requireRole('tpo_head', 'placement_officer')` or `requireRole('tpo_head')` |
+| `/cases` | `authenticate`, `enforcePasswordChange`; per route `requireRole('student')` + `requireTenant` (+ `caseRateLimiter` on create, `validateBody`/`validateQuery`, and for uploads an ownership check **before** `upload` (multer)); the evidence-link route uses `requireTenant` + `requireRole('student', 'placement_officer', 'tpo_head')` |
+| `/files` | `authenticate`, `enforcePasswordChange`; the controller verifies the link token against the session user |
 
 ## Layering
 
@@ -61,9 +63,9 @@ routes → controllers → services → repositories → models
 
 - **routes**: URL + method → middleware chain → controller. No logic.
 - **controllers**: map request to service input and service output to response; set/clear the session cookie. No Mongoose calls.
-- **services** (`auth`, `admin`, `staff`, `audit`): business rules and audit writes after successful actions.
-- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`). All college-scoped reads and writes go through it.
-- **models**: Mongoose schemas `College`, `User`, `AuditLog`.
+- **services** (`auth`, `admin`, `staff`, `audit`, `case`, `evidence`, `storage` (GridFS wrapper), `indicators/`): business rules and audit writes after successful actions.
+- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`, `counterRepository`, `caseRepository`, `caseEventRepository`, `evidenceRepository`). All college-scoped reads and writes go through it.
+- **models**: Mongoose schemas `College`, `User`, `AuditLog`, `Counter`, `Case`, `CaseEvent`, `Evidence` (+ GridFS bucket `evidence`).
 - **validators**: zod `.strict()` body schemas.
 - **utils**: `password` (bcrypt + policy), `jwt` (sign/verify, cookie options), `tokens` (join codes, temporary passwords), `safeUser` (the single `toSafeUser()` mapper).
 
@@ -86,7 +88,7 @@ Documented exceptions to "models only via repositories":
 - `AuthProvider` (`src/auth/AuthContext.jsx`) loads `/auth/me` on start and exposes `user`, `college`, `loading`, `login`, `register`, `logout`, `refresh` via `useAuth()`.
 - `ProtectedRoute allowedRoles={…}`: unauthenticated → `/login`; `mustChangePassword` → `/change-password`; wrong role → Forbidden page.
 - API modules `api/auth.js`, `api/admin.js`, `api/staff.js` all use the single axios instance (`api/client.js`).
-- Routes: `/`, `/login`, `/register`, `/change-password`, `/student`, `/staff`, `/staff/members`, `/admin`, `/admin/colleges/:id`. After login: student → `/student`, staff → `/staff`, super admin → `/admin`.
+- Routes: `/`, `/login`, `/register`, `/change-password`, `/student`, `/student/requests`, `/student/requests/new`, `/student/requests/:id`, `/staff`, `/staff/members`, `/admin`, `/admin/colleges/:id`. After login: student → `/student`, staff → `/staff`, super admin → `/admin`.
 
 ## Configuration
 

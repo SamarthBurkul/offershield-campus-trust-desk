@@ -101,3 +101,39 @@
 - **Context:** The brief allowed falling back to `bcryptjs` if the native build failed on Windows.
 - **Decision:** `bcrypt@6` installed with its prebuilt binary on Windows / Node 22 and is used at cost 12.
 - **Consequence:** No fallback needed. If a future platform lacks a prebuild, `bcryptjs` is API-compatible for `hash`/`compare`.
+
+## ADR-018: Two-step student submission (create, then upload)
+
+- **Context:** A case is structured JSON validated by strict schemas; evidence is multipart. Combining them in one multipart request would weaken JSON validation and make a failed upload discard the whole request.
+- **Decision:** `POST /cases` creates the case (JSON); the client then calls `POST /cases/:id/evidence`. If the upload fails, the case is kept and the detail page offers "Add more evidence" as a retry.
+- **Consequence:** A case can briefly exist without evidence, which is valid (evidence is optional). Each step has its own error codes and limits; no transactions are needed.
+
+## ADR-019: Own magic-byte check instead of `file-type`
+
+- **Context:** Only three types are accepted (PNG, JPEG, PDF). `file-type` is ESM-only (the server is CommonJS, ADR-002) and recognises hundreds of formats we do not need.
+- **Decision:** `utils/fileSignature.js` compares leading bytes against three fixed signatures and ignores the client's name and MIME type.
+- **Consequence:** Zero dependencies and a tiny, fully tested surface. Adding a type means adding a signature and a test.
+
+## ADR-020: Pure-JS image metadata stripping
+
+- **Context:** Screenshots and photos can carry GPS location, device serials and names in EXIF/XMP/IPTC/text chunks. Image libraries such as `sharp` add native binaries and decode untrusted pixels.
+- **Decision:** `utils/stripImageMetadata.js` walks the JPEG segment list / PNG chunk list and drops APP1, APP13, eXIf, tEXt, iTXt and zTXt without decoding pixels.
+- **Consequence:** No native dependency, deterministic output, pixel data untouched. Malformed containers are rejected. Other metadata carriers (e.g. APP2–APP12 vendor segments, ICC profiles) are kept; acceptable for the MVP.
+
+## ADR-021: PDFs are not sanitised; download as attachment only
+
+- **Context:** Safe PDF sanitisation needs a full parser/rewriter, which is out of scope and itself a risk.
+- **Decision:** PDFs are stored unchanged (`metadataStripped=false`) and always served with `Content-Disposition: attachment`, `nosniff` and `CSP: sandbox`, so the browser does not render them in the app's origin.
+- **Consequence:** PDF metadata and any active content remain in the file; viewers open PDFs in their local reader. Documented as a known limitation.
+
+## ADR-022: Evidence downloads need a short-lived link and the session
+
+- **Context:** Evidence must open in a new tab (images inline, PDFs downloaded), which cannot carry custom headers, yet must stay private.
+- **Decision:** An authorised API call issues a short-lived link token (default 5 minutes) bound to the evidence, case and user, signed with a key derived from `JWT_SECRET` for this purpose only. `GET /files/:token` requires that token **and** the same user's session cookie, and re-checks access.
+- **Consequence:** Leaked links (history, logs, shared screenshots) are useless without the session and expire quickly; disabling a user or changing their password also stops downloads. Each download is audited.
+
+## ADR-023: Free-mail domains are not domain indicators
+
+- **Context:** `gmail.com` and similar providers appear in genuine and fraudulent messages alike; recording them as domains would create meaningless registry matches in Phase 5.
+- **Decision:** `services/indicators/freeMailDomains.js` lists 15 public providers; their domains are not added as `domain` indicators. The full email address is still recorded as an `email` indicator.
+- **Consequence:** Domain indicators point at recruiter-controlled domains only. The list is easy to extend.

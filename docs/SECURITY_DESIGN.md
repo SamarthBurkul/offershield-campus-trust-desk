@@ -69,12 +69,75 @@ Services append `AuditLog` entries after successful actions: `auth.register`, `a
 - Seed scripts never print passwords or the super admin email, refuse demo seeding in production, and print only error names for driver errors (which can contain host names). The server never logs `MONGODB_URI` and exits with code 1 if it cannot connect.
 - Tests never read `server/.env` and use `mongodb-memory-server` only (ADR-011).
 
+## Implemented in Phase 3
+
+### Evidence validation by content
+
+- Files are parsed by multer into memory with hard limits (5 files × 3 MB, no text fields) **after** the route has checked that the caller owns the case and it is open, so non-owners cannot make the server buffer uploads.
+- `utils/fileSignature.js` identifies the type from magic bytes only: PNG `89 50 4E 47 0D 0A 1A 0A`, JPEG `FF D8 FF`, PDF `%PDF-`. The client's filename and MIME type are ignored; anything else is `400 UNSUPPORTED_FILE_TYPE` (ADR-019). If any file in a request fails, nothing is stored.
+- Stored names are sanitised (basename only, `[A-Za-z0-9 _-]`, extension from the detected type, ≤ 100 chars), so they are safe in `Content-Disposition`.
+
+### Metadata stripping
+
+`utils/stripImageMetadata.js` (pure JS, no image library, ADR-020) rewrites the container without decoding pixels:
+
+- JPEG: drops APP1 (EXIF, XMP — GPS location, device serials) and APP13 (Photoshop/IPTC) segments; everything from SOS (start of scan) onwards is kept verbatim.
+- PNG: drops `eXIf`, `tEXt`, `iTXt`, `zTXt` chunks; other chunks are copied with their CRCs intact.
+- Structurally invalid images are rejected (`UNSUPPORTED_FILE_TYPE`).
+- PDFs are **not** sanitised (`metadataStripped=false`) and are only ever served as downloads (`Content-Disposition: attachment`) inside a CSP sandbox (ADR-021).
+
+The SHA-256 is computed over the stored (stripped) bytes.
+
+### GridFS privacy
+
+- Evidence bytes live in the GridFS bucket `evidence` in the same database, not on disk or a public bucket. Each GridFS file carries `metadata.collegeId` and `metadata.caseId`.
+- No route addresses GridFS ids. Files are reached only through an `Evidence` document loaded via the tenant repository and matched to the case; `gridFsId` and `sha256` are never sent to students.
+
+### Two-factor download (short link + session)
+
+1. `POST /cases/:id/evidence/:evidenceId/link` checks access (owner student, or same-college staff; super admin 403; others 404) and returns `/api/v1/files/<token>`. The token is an HS256 JWT `{ eid, cid, uid, purpose: "evidence" }` signed with a key **derived** from `JWT_SECRET` via HMAC-SHA256 with the label `offershield:evidence-link:v1`, so it can never be used as a session token (or vice versa). Lifetime `EVIDENCE_LINK_TTL_SECONDS` (default 300 s).
+2. `GET /files/:token` additionally requires a valid session whose user id equals `uid`, and re-checks that this user may still see the case and that the evidence belongs to it. A leaked link is useless without the owner's session; a stolen session cannot open files without a fresh link (ADR-022).
+
+Each successful download is audited (`evidence.access`: actor, evidence id, case id — never the token or contents).
+
+### Download response headers
+
+`Content-Type` = stored (detected) MIME type; `X-Content-Type-Options: nosniff`; `Cache-Control: no-store`; `Content-Security-Policy: sandbox` (overrides helmet's page CSP: no scripts, forms, plugins or same-origin access even if a crafted file is rendered); `Content-Disposition: attachment` for PDF and `inline` for PNG/JPEG with the sanitised filename.
+
+### Privacy guard (Aadhaar / PAN)
+
+`utils/privacyGuard.js` returns `400 SENSITIVE_ID_DETECTED` for case creation (message, note, company, role, contacts) and replies containing:
+
+- a PAN: `[A-Z]{5}[0-9]{4}[A-Z]`, case-insensitive, as a standalone token;
+- an Aadhaar number: 12 digits, first digit 2–9, optionally grouped 4-4-4 with one consistent space or hyphen, not preceded by `+` or a digit and not followed by a digit, **and** passing the Verhoeff checksum (`utils/verhoeff.js`). The checksum keeps random 12-digit references and `+91` phone numbers from being rejected.
+
+The message asks the student to remove or mask the number; the matched value is never echoed in the response or written to logs. The UI also shows a banner asking students not to type or upload Aadhaar/PAN and to crop IDs out of screenshots.
+
+### No URL fetching
+
+Links, domains, emails, phones and UPI IDs are processed as strings only (`services/indicators/`). The server makes no HTTP request, DNS lookup or preview for submitted values; a test spies on `fetch`, `http.request`, `https.request` and `dns.lookup` during creation and reply. IDNs are converted to punycode with `url.domainToASCII` (no network). In the UI, indicators and links are shown as inert text, not anchors.
+
+### Student serializer
+
+Students only receive `toStudentCaseView` / `toStudentCaseSummary` / `toStudentEventView` / `toStudentEvidenceView` (`utils/caseViews.js`), built from explicit allow-lists. Excluded: `assigneeId`, `priority`, `signals`, `linkedCaseIds`, `decision.decidedBy`, staff ids, events with `visibleToStudent=false`, `gridFsId`, `sha256`. `CaseEvent.visibleToStudent` is required with no default, so every writer must decide.
+
+### Other Phase 3 controls
+
+- Strict schemas reject `collegeId`, `studentId`, `status`, `priority`, `assigneeId` and `decision` in bodies.
+- Per-student creation limit (`CASE_CREATE_LIMIT_PER_HOUR`, keyed by user id, not IP, because campus networks share IPs).
+- Closed cases accept no replies or evidence (`409 CASE_CLOSED`).
+- Audit: `case.create`, `case.student_message`, `evidence.upload`, `evidence.access`.
+
 ## Known limitations
 
 - **No email OTP verification in the MVP.** Student registration is controlled by the college email domain plus the college's join code (the pilot control, ADR-012). Someone who knows the join code could register with an address on the college's domain that they do not own. Mitigations: rotate the join code, disable accounts, add email verification later.
 - No password reset by email; staff passwords are reset by re-creating access (planned later).
 - Logout clears the cookie but does not revoke a copied token before it expires (≤ 8 h). Password change or disabling the account does revoke it.
 - Rate-limit state is in memory per process and `trust proxy` is not configured yet; both are set in Phase 7 (Render deployment).
+- PDFs are not sanitised (they may carry author metadata or active content); they are only downloaded as attachments under `CSP: sandbox` and opened in the user's own viewer.
+- Images are not decoded or re-encoded: metadata segments are removed, but pixel content (e.g. a visible ID card in a screenshot) is not inspected. Students are asked to crop IDs out.
+- No malware scanning of uploads in the MVP.
+- The privacy guard detects PAN and Aadhaar formats only; other identifiers (passport, voter ID, bank account numbers) are not detected.
 
 ## Rules for later phases (mandatory)
 

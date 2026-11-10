@@ -3,16 +3,47 @@
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Foundation: monorepo, Express API with health endpoint, security baseline, validated config, React client shell, tests, docs | **Passed (architect-reviewed 2026-11-10)** |
-| 2 | MongoDB, authentication, four roles, college tenancy and isolation, staff management, append-only audit log, seed scripts | **Implemented — awaiting architect review** |
-| 3 | Student verification requests, evidence (GridFS), indicator extraction | Not started |
+| 2 | MongoDB, authentication, four roles, college tenancy and isolation, staff management, append-only audit log, seed scripts | **Passed (architect-reviewed 2026-11-10)** |
+| 3 | Student verification requests, evidence (GridFS), indicator extraction | **Implemented — awaiting architect review** |
 | 4 | Case desk, decisions, audit views | Not started |
 | 5 | Registry, lookup, linking, warning signals | Not started |
 | 6 | Advisories, notifications, stats | Not started |
 | 7 | Security test suite, deployment (one Render web service), docs | Not started |
 
-## Phase 2 — details
+## Phase 3 — details
 
 **Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- Models `Counter`, `Case` (full schema for Phases 4–5), `CaseEvent`, `Evidence`; GridFS bucket `evidence`; shared constants (`CLOSED_STATUSES` etc.).
+- Student API: create (strict schema, privacy guard, indicator extraction, per-college case numbers, priority, per-user rate limit), list own (paginated), detail (student serializer, visible events, evidence list), reply (re-extraction, awaiting_student → under_review).
+- Evidence: multer memory upload (5 × 3 MB per request, 10 per case), magic-byte validation, JPEG/PNG metadata stripping, SHA-256, GridFS storage with tenant metadata, `evidence_added` events, audit.
+- Short-lived evidence links (derived key, 300 s default) + session-bound download with nosniff, no-store, CSP sandbox and disposition headers; staff of the same college can open evidence; audit `evidence.access`.
+- Privacy guard: PAN and Verhoeff-validated Aadhaar → `SENSITIVE_ID_DETECTED`.
+- Indicator extraction (email, domain incl. IDN→punycode and allow-listed bare domains, URL, Indian mobile, UPI), dedup with student_entered precedence.
+- Client: student home action cards, New request (sections, privacy banner, list inputs, file checks, consent), My requests (status labels, filter), Request detail (summary, money, indicators, evidence View, timeline, reply, add evidence).
+
+### Tests executed (2026-11-10, Node v22.13.1, MongoDB 8.2.6 in memory)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm run test:server` | Test Suites: 13 passed, 13 total; Tests: 145 passed, 145 total | 0 |
+| `npm run test:client` | Test Files 4 passed (4); Tests 19 passed (19) | 0 |
+| `npm test` | 145 server + 19 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | `client/dist` produced | 0 |
+| Smoke (HTTP through the Vite proxy against Atlas, demo accounts) | steps 1–7 as specified (see final report) | — |
+
+### Limitations
+
+- PDFs not sanitised; images not re-encoded; no malware scan (see SECURITY_DESIGN.md).
+- No staff case views yet (Phase 4); staff can only open evidence by link.
+- Smoke steps were exercised over HTTP through the dev proxy rather than by clicking in a browser.
+
+## Phase 2 — details
+
+**Status:** Passed (architect-reviewed 2026-11-10).
 
 ### Implemented
 
@@ -54,4 +85,4 @@
 - React 19 + Vite 8 + Tailwind v4 client shell with HealthStatus and a single axios instance.
 - Tests at sign-off: server 18/18, client 5/5; build and lint exit 0.
 
-**Next authorised phase:** none until architect approval of Phase 2.
+**Next authorised phase:** none until architect approval of Phase 3.

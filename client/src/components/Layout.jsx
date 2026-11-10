@@ -14,7 +14,10 @@ function navLinksFor(user) {
       { to: '/staff/members', label: 'Staff' },
     ]
   }
-  return [{ to: homePathForRole(user.role), label: 'Home' }]
+  return [
+    { to: homePathForRole(user.role), label: 'Home', end: true },
+    { to: '/student/requests', label: 'My requests' },
+  ]
 }
 
 export default function Layout() {

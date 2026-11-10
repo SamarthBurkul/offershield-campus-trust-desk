@@ -40,16 +40,20 @@ function createTenantRepository(Model) {
 
     return Object.freeze({
       collegeId,
-      find(filter, { select, sort, limit } = {}) {
+      find(filter, { select, sort, skip, limit, lean } = {}) {
         let query = Model.find(scope(filter));
         if (select) query = query.select(select);
         if (sort) query = query.sort(sort);
+        if (skip) query = query.skip(skip);
         if (limit) query = query.limit(limit);
+        if (lean) query = query.lean();
         return query.exec();
       },
-      findOne(filter, { select } = {}) {
-        const query = Model.findOne(scope(filter));
-        return (select ? query.select(select) : query).exec();
+      findOne(filter, { select, lean } = {}) {
+        let query = Model.findOne(scope(filter));
+        if (select) query = query.select(select);
+        if (lean) query = query.lean();
+        return query.exec();
       },
       /** Unknown, malformed and other-college ids all resolve to null (callers answer 404). */
       async findById(id, options) {
@@ -63,8 +67,21 @@ function createTenantRepository(Model) {
         assertNoCollegeIdChange(update);
         return Model.updateOne(scope(filter), update, { runValidators: true }).exec();
       },
+      /** Atomic update returning the new document. With upsert, the inserted document gets this collegeId. */
+      findOneAndUpdate(filter, update, { upsert = false } = {}) {
+        assertNoCollegeIdChange(update);
+        return Model.findOneAndUpdate(scope(filter), update, {
+          upsert,
+          returnDocument: 'after',
+          runValidators: true,
+          setDefaultsOnInsert: true,
+        }).exec();
+      },
       deleteOne(filter) {
         return Model.deleteOne(scope(filter)).exec();
+      },
+      deleteMany(filter) {
+        return Model.deleteMany(scope(filter)).exec();
       },
       create(doc) {
         return Model.create({ ...doc, collegeId });

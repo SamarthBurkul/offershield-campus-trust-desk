@@ -61,6 +61,8 @@ const envSchema = z
     JWT_EXPIRES_IN: z.string().default('8h').pipe(durationSeconds),
     AUTH_RATE_LIMIT_WINDOW_MS: positiveInt(15 * 60 * 1000),
     AUTH_RATE_LIMIT_MAX: positiveInt(10),
+    CASE_CREATE_LIMIT_PER_HOUR: positiveInt(10),
+    EVIDENCE_LINK_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
     // Used only by the seed scripts.
     SEED_SUPERADMIN_EMAIL: optionalString,
     SEED_SUPERADMIN_PASSWORD: optionalString,
@@ -119,6 +121,8 @@ function loadConfig(envObject = {}) {
       windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS,
       max: env.AUTH_RATE_LIMIT_MAX,
     }),
+    caseCreateLimitPerHour: env.CASE_CREATE_LIMIT_PER_HOUR,
+    evidenceLinkTtlSeconds: env.EVIDENCE_LINK_TTL_SECONDS,
     mongodbUri: env.MONGODB_URI,
     jwtSecret: env.JWT_SECRET,
     jwtExpiresInSeconds: env.JWT_EXPIRES_IN,

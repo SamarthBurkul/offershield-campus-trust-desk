@@ -29,6 +29,14 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | 400 | `EMAIL_DOMAIN_MISMATCH` | Staff email domain is not one of the college's domains |
 | 400 | `INVALID_CURRENT_PASSWORD` | Change password with a wrong current password |
 | 400 | `CANNOT_MODIFY_SELF` | TPO head tries to change their own status |
+| 400 | `SENSITIVE_ID_DETECTED` | Request text or contacts contain a PAN or a checksum-valid Aadhaar number (value never echoed) |
+| 400 | `UNSUPPORTED_FILE_TYPE` | Evidence is not PNG/JPEG/PDF by content, or the image is damaged |
+| 400 | `TOO_MANY_FILES` | More than 5 files in one upload, or more than 10 on one case |
+| 400 | `NO_FILES` | Upload without any file in the `files` field |
+| 400 | `INVALID_UPLOAD` | Malformed multipart body or unexpected fields |
+| 401 | `LINK_INVALID` | Evidence link expired, tampered, or issued to a different user |
+| 409 | `CASE_CLOSED` | Reply or upload on a closed case |
+| 413 | `FILE_TOO_LARGE` | An evidence file is over 3 MB |
 | 401 | `UNAUTHENTICATED` | No/invalid session |
 | 401 | `INVALID_CREDENTIALS` | Login failed (unknown email, wrong password, disabled user, suspended college — identical body) |
 | 403 | `FORBIDDEN` | Role not allowed, super admin on a college route, or target is a TPO head |
@@ -80,6 +88,13 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | GET | `/staff/members` | placement_officer, tpo_head | 200 | 401, 403 |
 | POST | `/staff/officers` | tpo_head | 201 | 400 `VALIDATION_ERROR` / `EMAIL_DOMAIN_MISMATCH`, 401, 403, 409 |
 | PATCH | `/staff/officers/:id/status` | tpo_head | 200 | 400 `VALIDATION_ERROR` / `CANNOT_MODIFY_SELF`, 401, 403 `FORBIDDEN` (target is a TPO head), 404 |
+| POST | `/cases` | student | 201 | 400 `VALIDATION_ERROR` / `SENSITIVE_ID_DETECTED`, 401, 403, 429 |
+| GET | `/cases/mine` | student | 200 | 400, 401, 403 |
+| GET | `/cases/:id` | student (owner) | 200 | 401, 403, 404 |
+| POST | `/cases/:id/messages` | student (owner) | 201 | 400 `VALIDATION_ERROR` / `SENSITIVE_ID_DETECTED`, 401, 403, 404, 409 `CASE_CLOSED` |
+| POST | `/cases/:id/evidence` | student (owner) | 201 | 400 `UNSUPPORTED_FILE_TYPE` / `TOO_MANY_FILES` / `NO_FILES` / `INVALID_UPLOAD`, 401, 403, 404, 409, 413 `FILE_TOO_LARGE` |
+| POST | `/cases/:id/evidence/:evidenceId/link` | student (owner), placement_officer, tpo_head (same college) | 200 | 401, 403 (super admin, other roles), 404 |
+| GET | `/files/:token` | the user the link was issued to (session required) | 200 (file stream) | 401 `UNAUTHENTICATED` / `LINK_INVALID`, 404 |
 
 Any authenticated route can also return `403 PASSWORD_CHANGE_REQUIRED` (except the three allowed auth routes).
 
@@ -170,13 +185,85 @@ Request: `{ "status": "active" | "disabled" }`.
 | Student in own college | `404 NOT_FOUND` (not an officer) |
 | Any account in another college, unknown or malformed id | `404 NOT_FOUND` |
 
+### Student verification requests (Phase 3)
+
+All `/cases` routes require a session and the `student` role (plus a tenant); the evidence-link route also allows same-college `placement_officer` and `tpo_head`. `collegeId` and `studentId` always come from the session. Another student's case, or any other college's case, returns `404 NOT_FOUND`.
+
+**StudentCaseView** (`toStudentCaseView`, the only case shape students receive):
+
+```json
+{
+  "id": "…", "caseNumber": "OS-DEMO-ALPHA-0001", "claimedCompany": "XYZ Careers Pvt Ltd", "roleTitle": "Data Intern",
+  "channel": "whatsapp", "receivedAt": "2026-11-09T00:00:00.000Z", "messageText": "…",
+  "links": ["https://…"], "contacts": { "emails": [], "phones": [], "upiIds": [] },
+  "moneyRequested": { "requested": true, "amount": 499, "purpose": "registration" },
+  "paidAlready": false, "documentsShared": false, "studentNote": null, "status": "submitted",
+  "indicators": [{ "type": "upi", "value": "careers.desk@okaxis", "source": "extracted" }],
+  "decision": null, "lastActivityAt": "…", "createdAt": "…", "updatedAt": "…"
+}
+```
+
+Never included: `assigneeId`, `priority`, `signals`, `linkedCaseIds`, `studentId`, `collegeId`, `decision.decidedBy`. `decision` (Phase 4) is `{ type, basis, decidedAt }` or null.
+
+#### `POST /cases`
+
+JSON body (strict; `collegeId`, `studentId`, `status`, `priority`, `assigneeId`, `decision` or any other extra key → 400):
+
+| Field | Rules |
+| --- | --- |
+| `claimedCompany` | 2–120 |
+| `roleTitle` | optional, ≤ 120 |
+| `channel` | whatsapp, telegram, email, linkedin, instagram, job_portal, sms, phone_call, other |
+| `receivedAt` | date/ISO string, not in the future |
+| `messageText` | 10–5000 |
+| `links` | optional, ≤ 10, http/https only, ≤ 500 chars each (stored as text, never fetched) |
+| `contacts` | optional `{ emails ≤5, phones ≤5, upiIds ≤5 }` |
+| `moneyRequested` | `{ requested: boolean, amount?: number ≥ 0 or null, purpose?: registration, training, security_deposit, document_verification, equipment, other or null }` |
+| `paidAlready`, `documentsShared` | boolean |
+| `studentNote` | optional, ≤ 2000 |
+| `consent` | must be `true` |
+
+The server runs the privacy guard (`messageText`, `studentNote`, company, role, contacts), extracts indicators, assigns the next per-college `caseNumber`, sets `priority` (high if money requested or paid), stores `consentAt`, writes a visible `created` event and audits `case.create`. Rate limit: `CASE_CREATE_LIMIT_PER_HOUR` per student (default 10) → 429. Response `201 { "case": StudentCaseView }`.
+
+#### `GET /cases/mine?status=&page=&limit=`
+
+Own cases, newest first. `status` optional (one of the case statuses), `page` ≥ 1 (default 1), `limit` 1–50 (default 10). Response `200 { "cases": [{ id, caseNumber, claimedCompany, channel, status, receivedAt, createdAt, lastActivityAt }], "page", "limit", "total" }`.
+
+#### `GET /cases/:id`
+
+`200 { "case": StudentCaseView, "events": [...], "evidence": [{ id, originalName, mime, size, createdAt }] }`. `events` are only those with `visibleToStudent: true`, oldest first, shaped `{ id, type, actor: "student" or "placement_cell" or "system", body, metadata, createdAt }` (staff identities are not exposed; metadata limited to `from/to` and `count/names`).
+
+#### `POST /cases/:id/messages`
+
+`{ "body": "1–3000 chars" }`. Owner only; closed case → 409 `CASE_CLOSED`. Privacy guard applies. Writes a visible `student_message` event; if the status was `awaiting_student` it becomes `under_review` with a visible `status_changed` event. Updates `lastActivityAt` and merges newly extracted indicators. Response `201` with the same shape as `GET /cases/:id`. Audit `case.student_message`.
+
+#### `POST /cases/:id/evidence`
+
+`multipart/form-data`, field `files`, 1–5 files, ≤ 3 MB each, ≤ 10 per case. Owner only, open cases only (checked before the body is read). Type is detected from magic bytes (PNG, JPEG, PDF); the claimed name/MIME type are ignored. EXIF/XMP/IPTC/text metadata is removed from images; PDFs are stored unchanged. Response `201 { "evidence": [{ id, originalName, mime, size, createdAt }] }`. Writes a visible `evidence_added` event and audits `evidence.upload`. If any file is rejected, nothing from the request is stored.
+
+#### `POST /cases/:id/evidence/:evidenceId/link`
+
+Empty body. Allowed: the owning student, or a placement officer / TPO head of the same college; super admin → 403; anyone else, other colleges, or evidence of a different case → 404. Response `200 { "url": "/api/v1/files/<token>", "expiresAt": "ISO" }`, valid for `EVIDENCE_LINK_TTL_SECONDS` (default 300).
+
+#### `GET /files/:token`
+
+Requires **both** the link token and a valid session of the same user (`uid`), who must still have access. Streams the file with:
+
+| Header | Value |
+| --- | --- |
+| `Content-Type` | stored MIME type |
+| `Content-Disposition` | `attachment` for PDF, `inline` for PNG/JPEG, with the sanitised filename |
+| `X-Content-Type-Options` | `nosniff` |
+| `Cache-Control` | `no-store` |
+| `Content-Security-Policy` | `sandbox` |
+
+No session → 401 `UNAUTHENTICATED`; expired/tampered/other user's token → 401 `LINK_INVALID`; evidence gone → 404. Each successful download is audited as `evidence.access`.
+
 ## Planned route groups (not implemented)
 
 | Group | Phase | Purpose |
 | --- | --- | --- |
-| `/api/v1/cases` | 3 | Student verification requests with evidence and indicator extraction |
-| `/api/v1/cases/:id/evidence` | 3 | Validated uploads (GridFS) and authorised downloads |
-| `/api/v1/cases/:id/events`, `/notes`, `/decision` | 4 | Case desk timeline, internal notes, final decisions |
+| `/api/v1/staff/cases/*` (indicative) | 4 | Staff case desk, assignment, internal notes, info requests, decisions |
 | `/api/v1/registry/*`, `/api/v1/lookup` | 5 | Registry, student lookup, linking, warning signals |
 | `/api/v1/advisories`, `/api/v1/notifications`, `/api/v1/stats` | 6 | Advisories, notifications, statistics |
 | `/api/v1/audit-logs` | 4 | Read-only audit trail for the TPO head |
