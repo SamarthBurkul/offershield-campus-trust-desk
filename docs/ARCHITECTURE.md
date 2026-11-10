@@ -6,26 +6,52 @@ npm workspaces with two packages:
 
 | Package | Stack | Purpose |
 | --- | --- | --- |
-| `server/` | Node.js 20+, Express 5, CommonJS | REST API under `/api/v1` |
+| `server/` | Node.js 20+, Express 5, CommonJS, Mongoose 9 | REST API under `/api/v1` |
 | `client/` | React 19, Vite, Tailwind CSS v4, React Router, axios | Browser UI |
 
 The root `package.json` only orchestrates (`dev`, `test`, `build`, `lint`) and holds `concurrently`. Each package owns its dependencies.
 
 ## Server request pipeline
 
-`server/src/app.js` builds the app in this exact order:
+Middleware order, as implemented:
+
+```
+helmet → cors → express.json (100kb) → cookieParser → rate limit (/api)
+  → [/api/v1 router]
+      → authRateLimiter (login, register only)
+      → authenticate → enforcePasswordChange → requireRole / requireTenant
+      → validators (zod .strict())
+      → controller → service → tenant repository → model
+  → notFound → errorHandler
+```
+
+`server/src/app.js` builds the app in this order:
 
 1. `app.disable('x-powered-by')`
 2. `helmet()` — security headers
-3. `cors()` — allow-list from `CLIENT_ORIGINS`, `credentials: true`; requests without an `Origin` header are allowed; a disallowed origin receives no CORS headers (no error, no crash)
+3. `cors()` — allow-list from `CLIENT_ORIGINS`, `credentials: true`
 4. `express.json({ limit: '100kb' })`
-5. Baseline rate limiter on `/api`
-6. *(Phase 2, planned)* authentication → tenant resolution → RBAC, mounted per router
-7. Routes at `/api/v1`
+5. `cookieParser()`
+6. Baseline rate limiter on `/api`
+7. `createApiRouter(config)` at `/api/v1` — each feature router applies, per route or router:
+   - `authRateLimiter` on `POST /auth/login` and `POST /auth/register`
+   - `authenticate` (verify JWT cookie, reload the user, set `req.user`)
+   - `enforcePasswordChange` (temporary-password allow-list)
+   - `requireRole(...)` and/or `requireTenant` (sets `req.tenant = { collegeId }` from `req.user`)
+   - `validateBody(schema)`
+   - controller
 8. `notFound` — 404 envelope
 9. `errorHandler` — maps errors to the standard envelope
 
-`app.js` never listens. `server.js` imports the app and calls `listen`, so tests use Supertest against `app.js` with no open ports.
+Routers are built per app instance (`createApp(config)`), so tests can create apps with their own secret and rate limits. `app.js` never listens and never connects to MongoDB; `server.js` calls `connectDB(MONGODB_URI)` first, exits with code 1 (URI not printed) on failure, then listens.
+
+| Router | Router-level middleware |
+| --- | --- |
+| `/health` | none |
+| `/auth` | per route: limiter + validator (`register`, `login`); none (`logout`); `authenticate`, `enforcePasswordChange` (`me`, `change-password`) |
+| `/admin` | `authenticate`, `enforcePasswordChange`, `requireRole('super_admin')` |
+| `/college` | `authenticate`, `enforcePasswordChange`, `requireTenant` |
+| `/staff` | `authenticate`, `enforcePasswordChange`, `requireTenant`, then per route `requireRole('tpo_head', 'placement_officer')` or `requireRole('tpo_head')` |
 
 ## Layering
 
@@ -33,51 +59,63 @@ The root `package.json` only orchestrates (`dev`, `test`, `build`, `lint`) and h
 routes → controllers → services → repositories → models
 ```
 
-- **routes**: URL + HTTP method → middleware chain → controller. No logic.
-- **controllers**: map request to service input and service output to response. No business logic.
-- **services**: business rules (case transitions, decision rules, registry updates).
-- **repositories**: all database queries; every query on college-owned data takes a `collegeId`.
-- **models**: Mongoose schemas (Phase 2+).
-- **validators**: zod schemas for request bodies/params (Phase 2+).
+- **routes**: URL + method → middleware chain → controller. No logic.
+- **controllers**: map request to service input and service output to response; set/clear the session cookie. No Mongoose calls.
+- **services** (`auth`, `admin`, `staff`, `audit`): business rules and audit writes after successful actions.
+- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`). All college-scoped reads and writes go through it.
+- **models**: Mongoose schemas `College`, `User`, `AuditLog`.
+- **validators**: zod `.strict()` body schemas.
+- **utils**: `password` (bcrypt + policy), `jwt` (sign/verify, cookie options), `tokens` (join codes, temporary passwords), `safeUser` (the single `toSafeUser()` mapper).
 
-Phase 1 only has the health route/controller; `models/`, `repositories/`, `services/` and `validators/` are empty placeholders.
+Documented exceptions to "models only via repositories":
 
-## Tenant and RBAC middleware (Phase 2, planned)
+- `College` is the tenant itself (platform-level), used directly by the auth and admin services.
+- Identity lookups before a tenant is known: login by unique email, session reload by the verified JWT `sub`, email-uniqueness checks.
+- Super admin staff counts across colleges (`User.aggregate`).
+- `AuditLog` writes in `audit.service`.
 
-- `authenticate` reads the JWT from an httpOnly cookie and attaches `req.user` (`id`, `role`, `collegeId`).
-- `tenantContext` takes `collegeId` **only** from the authenticated session (never from body, query or params) and passes it down to services/repositories.
-- `authorize(...roles)` restricts routes by role; ownership rules (a student sees only their own cases) are enforced in services/repositories.
-- These run after the global pipeline (steps 1–5) and before the feature routers.
+## Tenant and RBAC
+
+- `authenticate` sets `req.user` (safe user) from the database, never from token claims alone.
+- `requireTenant` takes `collegeId` **only** from `req.user` and refuses `super_admin`.
+- `requireRole(...roles)` restricts routes by role → `403 FORBIDDEN`.
+- Services call `userRepository.forTenant(req.tenant.collegeId)`; another college's record is indistinguishable from a missing one (404).
+
+## Client
+
+- `AuthProvider` (`src/auth/AuthContext.jsx`) loads `/auth/me` on start and exposes `user`, `college`, `loading`, `login`, `register`, `logout`, `refresh` via `useAuth()`.
+- `ProtectedRoute allowedRoles={…}`: unauthenticated → `/login`; `mustChangePassword` → `/change-password`; wrong role → Forbidden page.
+- API modules `api/auth.js`, `api/admin.js`, `api/staff.js` all use the single axios instance (`api/client.js`).
+- Routes: `/`, `/login`, `/register`, `/change-password`, `/student`, `/staff`, `/staff/members`, `/admin`, `/admin/colleges/:id`. After login: student → `/student`, staff → `/staff`, super admin → `/admin`.
 
 ## Configuration
 
-`server/src/config/env.js` loads `server/.env` via dotenv, validates it with zod and exports a frozen config. It is the only server module that reads `process.env` (enforced by an ESLint rule). Invalid configuration throws at startup with the list of invalid keys, never their values.
+`server/src/config/env.js` loads `server/.env` via dotenv (skipped when `NODE_ENV=test`), validates it with zod and exports a frozen config. It is the only server module that reads `process.env` (ESLint rule). `MONGODB_URI` and `JWT_SECRET` are required in development and production.
 
 ## Development proxy and cookie strategy
 
-- The Vite dev server (port 5173) proxies `/api` to `http://localhost:5000`.
-- The client calls relative URLs (`/api/v1/...`) through a single axios instance (`client/src/api/client.js`) with `withCredentials: true` and a 10 s timeout.
-- Because the browser sees the API as same-origin in development, httpOnly, `SameSite=Lax` auth cookies (Phase 2) work without cross-site cookie configuration.
-- In production the client and API should also be served from one origin (reverse proxy); `CLIENT_ORIGINS` remains as a strict CORS allow-list for any other origin.
+- The Vite dev server (5173) proxies `/api` to `http://localhost:5000`, so the browser sees the API as same-origin and the `SameSite=Lax` cookie just works.
+- Production (Phase 7, ADR-015): one Render web service serves both the built client and the API from one origin.
 
 ## Diagram
 
 ```mermaid
 flowchart LR
   subgraph Browser
-    UI[React client<br/>Vite :5173]
+    UI[React client<br/>AuthProvider · ProtectedRoute]
   end
   subgraph API[Express API :5000]
-    MW[helmet → CORS → JSON 100kb → rate limit]
-    R[/api/v1 routes/]
+    MW[helmet → CORS → JSON → cookies → rate limit]
+    A[authenticate → enforcePasswordChange → requireRole / requireTenant → validate]
     C[controllers]
-    S[services]
-    Rep[repositories]
+    S[services + audit]
+    Rep[tenantRepository]
     EH[notFound / errorHandler]
-    MW --> R --> C --> S --> Rep
-    R -.-> EH
+    MW --> A --> C --> S --> Rep
+    A -.-> EH
   end
-  DB[(MongoDB<br/>Phase 2 — not configured)]
-  UI -- "/api/* (Vite proxy in dev)" --> MW
-  Rep -. future .-> DB
+  DB[(MongoDB<br/>colleges · users · auditlogs)]
+  UI -- "/api/* with os_session cookie" --> MW
+  Rep --> DB
+  S --> DB
 ```

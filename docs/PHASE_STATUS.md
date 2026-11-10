@@ -2,44 +2,56 @@
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Foundation: monorepo, Express API with health endpoint, security baseline, validated config, React client shell, tests, docs | **Implemented — awaiting architect review** |
-| 2 | MongoDB, colleges, users, authentication, tenant context, RBAC | Not started |
-| 3 | Cases: submission, staff queue, case events, internal notes | Not started |
-| 4 | Evidence uploads and final decisions | Not started |
-| 5 | College registry: recruiters and indicators, student search | Not started |
-| 6 | Advisories, acknowledgements, notifications, audit log views | Not started |
-| 7 | Hardening, deployment and release readiness | Not started |
+| 1 | Foundation: monorepo, Express API with health endpoint, security baseline, validated config, React client shell, tests, docs | **Passed (architect-reviewed 2026-11-10)** |
+| 2 | MongoDB, authentication, four roles, college tenancy and isolation, staff management, append-only audit log, seed scripts | **Implemented — awaiting architect review** |
+| 3 | Student verification requests, evidence (GridFS), indicator extraction | Not started |
+| 4 | Case desk, decisions, audit views | Not started |
+| 5 | Registry, lookup, linking, warning signals | Not started |
+| 6 | Advisories, notifications, stats | Not started |
+| 7 | Security test suite, deployment (one Render web service), docs | Not started |
 
-## Phase 1 — details
+## Phase 2 — details
 
 **Status:** Implemented — awaiting architect review (not yet passed).
 
 ### Implemented
 
-- npm workspaces monorepo (`client`, `server`) with root `dev`, `test`, `build`, `lint` scripts; `engines.node >= 20`.
-- Express 5 API (CommonJS): `app.js` builds the app, `server.js` only listens.
-- Pipeline: `x-powered-by` disabled → helmet → CORS allow-list with credentials → JSON body limit 100 kb → baseline `/api` rate limiter → `/api/v1` routes → `notFound` → `errorHandler`.
-- `GET /api/v1/health` with `database: "not_configured"`.
-- Standard error envelope: `NOT_FOUND`, `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `BAD_REQUEST`, `RATE_LIMITED`, `INTERNAL_ERROR`, `AppError` codes; no stack traces outside development.
-- zod-validated, frozen config (`loadConfig`), fail-fast with key names only; ESLint rule blocks `process.env` outside `config/env.js`.
-- React 19 + Vite 8 + Tailwind v4 client: Layout, HomePage, NotFoundPage, HealthStatus (loading / healthy / unavailable), single axios instance, Vite `/api` proxy.
+- Mongoose 9 connection (`config/db.js`); `server.js` connects before listening and exits 1 on failure without printing the URI. Health reports `database: "connected" | "disconnected"`.
+- Config: `MONGODB_URI` and `JWT_SECRET` required in development/production; `JWT_EXPIRES_IN` (8h), `AUTH_RATE_LIMIT_WINDOW_MS` (900000), `AUTH_RATE_LIMIT_MAX` (10), seed keys, derived `cookieSecure`.
+- Models `College`, `User`, `AuditLog` (append-only hooks) — see DATA_MODEL.md.
+- `tenantRepository` with `forTenant(collegeId)`; 404 for cross-tenant records.
+- Cookie auth (`os_session`, httpOnly, SameSite=Lax, Secure in production), bcrypt cost 12, password policy, `tokenVersion` revocation, generic login errors, suspended-college blocking, strict auth rate limiter.
+- Middleware `authenticate`, `requireRole`, `requireTenant`, `enforcePasswordChange`, `authRateLimiter`, `validateBody`.
+- Routes: auth (register, login, logout, me, change-password), super admin (colleges CRUD-lite, join-code rotation, TPO heads, staff list), college (`/college/me`), staff (members, officers, officer status) — see API_CONTRACT.md.
+- Seed scripts `seed:superadmin` and `seed:demo` (idempotent; no secrets printed; demo refuses production).
+- Client: `AuthProvider`/`useAuth`, `ProtectedRoute`, Login, Register, Change password, Forbidden, Student home, Staff home, Staff members, Admin colleges, Admin college detail; header with name, role and logout; one-time secret panel with copy button.
 
-### Tests executed (2026-11-10, Node v22.13.1, npm 10.9.2)
+### Tests executed (2026-11-10, Node v22.13.1, npm 10.9.2, MongoDB 8.2.6 in memory)
 
 | Command | Result | Exit code |
 | --- | --- | --- |
-| `npm run test:server` | Test Suites: 3 passed, 3 total; Tests: 18 passed, 18 total | 0 |
-| `npm run test:client` | Test Files 2 passed (2); Tests 5 passed (5) | 0 |
-| `npm test` | 18 server + 5 client passed, 0 failed | 0 |
-| `npm test` with a temporary failing test (removed afterwards) | Tests: 1 failed, 18 passed; client tests not run | 1 |
-| `npm run build` | `client/dist` produced | 0 |
+| `npm run test:server` | Test Suites: 8 passed, 8 total; Tests: 85 passed, 85 total | 0 |
+| `npm run test:client` | Test Files 3 passed (3); Tests 13 passed (13) | 0 |
+| `npm test` | 85 server + 13 client passed, 0 failed | 0 |
 | `npm run lint` | ESLint: 0 problems; oxlint: 0 warnings, 0 errors | 0 |
-| Smoke: `GET :5000/api/v1/health` and `GET :5173/api/v1/health` (proxy) | 200 with expected JSON on both | — |
+| `npm run build` | `client/dist` produced | 0 |
+| `npm run seed:superadmin -w server` (twice, Atlas) | created, then "already exists; nothing changed" | 0 |
+| `npm run seed:demo -w server` (twice, Atlas) | 2 colleges + 8 users created, then all "exists" | 0 |
+| Smoke via `npm run dev` (HTTP through the Vite proxy) | health `connected`; super admin login → `super_admin`, `/admin` served; alpha TPO head sees only alpha staff; new demo-alpha student registered (201) | — |
 
 ### Limitations
 
-- No database, auth, tenancy or features (by design for Phase 1).
-- Rate limiter uses in-memory storage and no `trust proxy` setting; revisit at deployment.
-- `npm audit` reports 23 low/moderate advisories in dev-only Jest transitive dependencies (`glob`, `minimatch`, `deepmerge`); production dependencies audit clean. The suggested fix downgrades Jest to v25, so it was not applied.
+- No email OTP: join code + college email domain is the pilot registration control (ADR-012).
+- No password reset; logout does not revoke a copied token before expiry (password change/disable does).
+- Rate-limit store in memory; `trust proxy` not set (Phase 7).
+- Smoke steps 2–4 were exercised over HTTP through the dev proxy rather than by clicking through a browser.
 
-**Next authorised phase:** none until architect approval.
+## Phase 1 — details
+
+**Status:** Passed (architect-reviewed 2026-11-10).
+
+- npm workspaces monorepo; Express 5 API (CommonJS) with `app.js`/`server.js` split; helmet, CORS allow-list, 100 kb JSON limit, baseline rate limiter, standard error envelope; zod-validated frozen config; `GET /api/v1/health`.
+- React 19 + Vite 8 + Tailwind v4 client shell with HealthStatus and a single axios instance.
+- Tests at sign-off: server 18/18, client 5/5; build and lint exit 0.
+
+**Next authorised phase:** none until architect approval of Phase 2.

@@ -30,11 +30,11 @@
 - **Decision:** The client calls relative `/api/v1` URLs; Vite proxies `/api` to `http://localhost:5000` in development.
 - **Consequence:** The browser treats the API as same-origin. Production should also serve both from one origin; CORS stays as a strict allow-list for any other origin.
 
-## ADR-006: JWT in httpOnly cookies (planned, Phase 2)
+## ADR-006: JWT in httpOnly cookies (implemented in Phase 2)
 
 - **Context:** Tokens in `localStorage` are readable by any injected script.
 - **Decision:** Issue a signed JWT in an httpOnly, `SameSite=Lax`, `Secure`-in-production cookie. `JWT_SECRET` is already declared as an optional, validated (≥ 32 chars) config key.
-- **Consequence:** Client JS never handles tokens; axios uses `withCredentials: true`. CSRF exposure is limited by same-origin deployment and `SameSite`, reviewed in Phase 2.
+- **Consequence:** Client JS never handles tokens; axios uses `withCredentials: true`. The cookie is `os_session`; CSRF exposure is limited by same-origin deployment (ADR-015), `SameSite=Lax` and JSON-only bodies (see SECURITY_DESIGN.md).
 
 ## ADR-007: No recruiter self-registration in the MVP
 
@@ -59,3 +59,45 @@
 - **Context:** ESLint 10 flat config does not bundle the recommended rule set or Node/Jest global definitions.
 - **Decision:** Add `@eslint/js` and `globals` as server dev dependencies.
 - **Consequence:** Two small, official dev-only packages; no runtime impact.
+
+## ADR-011: mongodb-memory-server for server tests
+
+- **Context:** Phase 2 tests need a real MongoDB (unique indexes, hooks, aggregation) but must never touch the Atlas cluster configured in `server/.env`.
+- **Decision:** Each Jest test file starts a private in-memory `mongod` through `tests/helpers/db.js` (`useTestDatabase()`), clears collections after every test and stops it afterwards. `config/env.js` skips loading `server/.env` when `NODE_ENV=test`.
+- **Consequence:** Tests are isolated and offline after the first run, which downloads a ~520 MB MongoDB binary into the user cache. mongodb driver 7.8 loads `os` with a dynamic `import()`, which fails inside Jest's CommonJS sandbox and produces an empty handshake; the helper therefore passes the driver's `runtimeAdapters: { os }` option. Production code is unaffected.
+
+## ADR-012: Join code + email domain instead of OTP for student registration
+
+- **Context:** Email OTP needs an email provider, templates and delivery handling, which does not fit the MVP schedule.
+- **Decision:** A student registers only if the college code is active, the email's domain is one of the college's `emailDomains`, and the college's join code (stored hashed, rotatable by the super admin) matches.
+- **Consequence:** A holder of the join code can register an address on the domain they do not own. Accepted for the pilot; documented in SECURITY_DESIGN.md as a known limitation. Email verification can be added later without changing the data model.
+
+## ADR-013: Temporary staff passwords shown once
+
+- **Context:** There is no email sending in the MVP, so new staff cannot receive invitation links.
+- **Decision:** Creating a TPO head or placement officer returns a random 16-character temporary password exactly once; the account is flagged `mustChangePassword`, and `enforcePasswordChange` blocks everything except `me`, `change-password` and `logout` until it is changed.
+- **Consequence:** The creator must pass the password on through a secure channel. Lost temporary passwords need a new account (or a future reset feature); they are never stored in plain text or logged.
+
+## ADR-014: 404 (not 403) for cross-tenant record access
+
+- **Context:** A 403 for "exists but belongs to another college" would let any college user probe for other colleges' record ids.
+- **Decision:** Tenant-scoped lookups return null for other colleges' records, and services answer `404 NOT_FOUND` exactly as for a non-existent or malformed id. `403` is used only for role/route permission failures inside the caller's own tenant (e.g. a TPO head targeting another TPO head).
+- **Consequence:** Clients cannot distinguish "forbidden elsewhere" from "missing"; isolation tests assert 404.
+
+## ADR-015: Planned production deployment as one Render web service (Phase 7)
+
+- **Context:** The session uses an httpOnly `SameSite=Lax` cookie. A separately hosted client would make API calls cross-site, requiring `SameSite=None`, CSRF tokens and stricter CORS.
+- **Decision:** In Phase 7, deploy one Render web service: Express serves the built client (`client/dist`) and the API under `/api/v1` from the same origin. `trust proxy` and a shared rate-limit store are configured then.
+- **Consequence:** Cookies stay same-origin in production as they are in development (Vite proxy). The API remains CORS-restricted for any other origin.
+
+## ADR-016: Planned evidence storage in MongoDB GridFS (Phase 3)
+
+- **Context:** Evidence files must be private, access-checked and tenant-scoped; adding an object store adds credentials and another service to secure.
+- **Decision:** Store evidence bytes in MongoDB GridFS in the same database, with an `evidence` metadata document carrying `collegeId`, and stream downloads only through authorised API routes.
+- **Consequence:** One datastore and one backup story; file size limits must stay modest (Atlas storage quotas). Can move to object storage later behind the same service interface.
+
+## ADR-017: Native `bcrypt` package
+
+- **Context:** The brief allowed falling back to `bcryptjs` if the native build failed on Windows.
+- **Decision:** `bcrypt@6` installed with its prebuilt binary on Windows / Node 22 and is used at cost 12.
+- **Consequence:** No fallback needed. If a future platform lacks a prebuild, `bcryptjs` is API-compatible for `hash`/`compare`.

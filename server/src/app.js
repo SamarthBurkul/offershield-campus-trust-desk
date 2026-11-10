@@ -3,9 +3,10 @@
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 
 const { config: defaultConfig } = require('./config/env');
-const apiRoutes = require('./routes');
+const { createApiRouter } = require('./routes');
 const notFound = require('./middleware/notFound');
 const { createErrorHandler } = require('./middleware/errorHandler');
 const { createApiRateLimiter } = require('./middleware/rateLimiter');
@@ -28,8 +29,9 @@ function createApp(config = defaultConfig) {
     }),
   );
   app.use(express.json({ limit: '100kb' }));
+  app.use(cookieParser());
   app.use('/api', createApiRateLimiter(config.rateLimit));
-  app.use('/api/v1', apiRoutes);
+  app.use('/api/v1', createApiRouter(config));
   app.use(notFound);
   app.use(createErrorHandler(config));
 

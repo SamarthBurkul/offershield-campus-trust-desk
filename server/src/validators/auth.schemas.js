@@ -1,0 +1,32 @@
+'use strict';
+
+const { z, nameSchema, emailSchema, collegeCodeSchema, branchSchema } = require('./common');
+const { passwordSchema } = require('../utils/password');
+
+const registerSchema = z
+  .object({
+    name: nameSchema,
+    email: emailSchema,
+    password: passwordSchema,
+    collegeCode: collegeCodeSchema,
+    joinCode: z.string().trim().min(1, { error: 'is required' }).max(64),
+    year: z.number().int().min(1).max(5),
+    branch: branchSchema,
+  })
+  .strict();
+
+const loginSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().min(1, { error: 'is required' }).max(254),
+    password: z.string().min(1, { error: 'is required' }).max(200),
+  })
+  .strict();
+
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, { error: 'is required' }).max(200),
+    newPassword: passwordSchema,
+  })
+  .strict();
+
+module.exports = { registerSchema, loginSchema, changePasswordSchema };

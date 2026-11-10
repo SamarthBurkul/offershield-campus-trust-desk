@@ -89,7 +89,13 @@ describe('unexpected errors in production', () => {
         },
       }));
       const { createApp } = require('../src/app');
-      prodApp = createApp(loadConfig({ NODE_ENV: 'production' }));
+      prodApp = createApp(
+        loadConfig({
+          NODE_ENV: 'production',
+          MONGODB_URI: 'mongodb://127.0.0.1:1/unused',
+          JWT_SECRET: 'test-only-production-secret-0123456789abcdef',
+        }),
+      );
     });
 
     const res = await request(prodApp).get('/api/v1/health');

@@ -20,6 +20,13 @@ function classify(err) {
     // Other body-parser client errors (unsupported charset/encoding, etc.).
     return { status: err.status, code: 'BAD_REQUEST', message: 'Invalid request body' };
   }
+  if (err && err.name === 'ValidationError' && err.errors) {
+    // Mongoose validation: field names only, values could be echoed in the native message.
+    return { status: 400, code: 'VALIDATION_ERROR', message: `Invalid data: ${Object.keys(err.errors).join(', ')}` };
+  }
+  if (err && err.code === 11000) {
+    return { status: 409, code: 'CONFLICT', message: 'A record with these details already exists' };
+  }
   return { status: 500, code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' };
 }
 

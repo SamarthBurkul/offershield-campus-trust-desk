@@ -3,9 +3,12 @@
 const request = require('supertest');
 const { app } = require('../src/app');
 const { version } = require('../package.json');
+const { useTestDatabase } = require('./helpers/db');
+
+const testDb = useTestDatabase();
 
 describe('GET /api/v1/health', () => {
-  it('returns 200 JSON with every documented field and correct types', async () => {
+  it('25. returns 200 JSON with every documented field and database "connected" with the memory server', async () => {
     const res = await request(app).get('/api/v1/health');
 
     expect(res.status).toBe(200);
@@ -17,11 +20,25 @@ describe('GET /api/v1/health', () => {
       environment: 'test',
       uptimeSeconds: expect.any(Number),
       timestamp: expect.any(String),
-      database: 'not_configured',
+      database: 'connected',
     });
     expect(Number.isInteger(res.body.uptimeSeconds)).toBe(true);
     expect(res.body.uptimeSeconds).toBeGreaterThanOrEqual(0);
     expect(new Date(res.body.timestamp).toISOString()).toBe(res.body.timestamp);
+  });
+
+  it('reports database "disconnected" when mongoose is not connected', async () => {
+    const { disconnectDB } = require('../src/config/db');
+    await disconnectDB();
+
+    try {
+      const res = await request(app).get('/api/v1/health');
+
+      expect(res.status).toBe(200);
+      expect(res.body.database).toBe('disconnected');
+    } finally {
+      await testDb.connect();
+    }
   });
 });
 
