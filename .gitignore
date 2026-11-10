@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment files (never commit secrets) - examples are kept
+.env
+.env.*
+!.env.example
+
+# Build and test output
+dist/
+dist-ssr/
+coverage/
+
+# Uploaded evidence (later phases) - never commit
+uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+!.vscode/settings.json
+.idea/
