@@ -15,10 +15,13 @@ import {
   STUDENT_OUTCOME_COPY,
   isClosedStatus,
 } from '../constants/caseStatus.js'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
 
 const yesNo = (value) => (value ? 'Yes' : 'No')
 
 export default function RequestDetailPage() {
+  usePageTitle('Request')
   const { id } = useParams()
   const location = useLocation()
   const [data, setData] = useState(null)
@@ -45,7 +48,7 @@ export default function RequestDetailPage() {
       </div>
     )
   }
-  if (!data) return <p className="text-slate-600">Loading…</p>
+  if (!data) return <Skeleton rows={4} label="Loading request" />
 
   const { case: request, events, evidence } = data
   const closed = isClosedStatus(request.status)

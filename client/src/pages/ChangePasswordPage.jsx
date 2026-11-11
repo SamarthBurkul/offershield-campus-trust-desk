@@ -5,8 +5,10 @@ import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import { Button, Card, ErrorAlert, TextField } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 export default function ChangePasswordPage() {
+  usePageTitle('Change password')
   const { user, refresh } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })

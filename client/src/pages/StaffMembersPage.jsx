@@ -4,8 +4,11 @@ import { createOfficer, listStaffMembers, setOfficerStatus } from '../api/staff.
 import { ROLE_LABELS, ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import { Button, Card, ErrorAlert, OneTimeSecret, StatusBadge, TextField } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
 
 export default function StaffMembersPage() {
+  usePageTitle('Staff members')
   const { user } = useAuth()
   const canManage = user.role === ROLES.TPO_HEAD
   const [members, setMembers] = useState(null)
@@ -49,7 +52,7 @@ export default function StaffMembersPage() {
 
       <Card title="Your college's staff">
         <ErrorAlert message={loadError || actionError} />
-        {members === null && !loadError && <p className="text-slate-600">Loading…</p>}
+        {members === null && !loadError && <Skeleton rows={3} label="Loading staff" />}
         {members && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

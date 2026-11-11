@@ -5,6 +5,7 @@ import { ROLE_LABELS, ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import LookupBox from '../components/LookupBox.jsx'
 import { Card } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 const COUNT_CARDS = [
   { key: 'open', label: 'Open cases', to: '/staff/cases?status=open' },
@@ -19,6 +20,7 @@ const COUNT_CARDS = [
 export default function StaffHomePage() {
   const { user, college } = useAuth()
   const isHead = user.role === ROLES.TPO_HEAD
+  usePageTitle('Staff home')
   const [counts, setCounts] = useState(null)
 
   useEffect(() => {
@@ -59,6 +61,18 @@ export default function StaffHomePage() {
               Case desk
             </Link>
             <span className="text-sm text-slate-600"> — triage, investigate and {isHead ? 'decide' : 'recommend on'} student requests</span>
+          </li>
+          <li>
+            <Link to="/staff/advisories" className="font-medium text-blue-700 hover:underline">
+              Advisories
+            </Link>
+            <span className="text-sm text-slate-600"> — warn targeted students about confirmed scams</span>
+          </li>
+          <li>
+            <Link to="/staff/stats" className="font-medium text-blue-700 hover:underline">
+              Statistics
+            </Link>
+            <span className="text-sm text-slate-600"> — what the desk has caught and how fast</span>
           </li>
           <li>
             <Link to="/staff/registry" className="font-medium text-blue-700 hover:underline">

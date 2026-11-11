@@ -205,6 +205,28 @@ Look-alike detection (tldts + punycode + homoglyph skeleton + edit distance), Si
 
 Signals, related cases, `textHash`, `linked` events and source-case links are serialized only by staff views. Signals never change status or priority and never block a request. Linking never crosses colleges and ignores free-mail domains and verified recruiters' domains, so legitimate shared contacts do not link unrelated students.
 
+## Implemented in Phase 6
+
+### Advisory content rules
+
+- **Confirmed findings only:** an advisory can link only ACTIVE fraud indicators of the college (checked on save and again on publish). Revoked indicators disappear from student views immediately and flag the advisory `needsReview` for staff.
+- **No student identity:** when an advisory comes from a case, its title and body are rejected if they contain the reporting student's name or email (`CONTAINS_STUDENT_IDENTITY`); the prefilled template contains neither. `sourceCaseId` and author fields are never sent to students.
+- **Privacy guard:** PAN/Aadhaar detection applies to advisory text.
+- **Head-only publishing, immutable once published:** officers draft; only the TPO head publishes or withdraws. Published text cannot be edited — corrections are a withdraw plus a new advisory, so what students saw is always auditable (ADR-038, ADR-039).
+- **Targeting** uses year/branch only; acknowledgement breakdowns are counts, never names.
+
+### Notification template allow-list
+
+Notification text is produced only by `services/notifications/templates.js` from an allow-listed context: case number, claimed company, the student-visible decision message (≤ 200 chars), advisory title and severity. Callers cannot pass a title or body. Decision basis and checks, note bodies, recommendation basis, reopen reasons, signals and related cases can therefore never reach a notification; a leak test verifies this with distinctive strings. Links must be internal paths. Notification failures never fail the main action (errors are swallowed; only the error code is logged). Every inbox query filters by both `collegeId` and `userId`.
+
+### Aggregation tenant guard
+
+`tenantRepository.forTenant(id).aggregate(pipeline)` always prepends `{ $match: { collegeId } }` and refuses `$lookup`, `$graphLookup`, `$unionWith`, `$out`, `$merge` and `$facet` (stages that can reach other collections or hide sub-pipelines); a stage with more than one operator is refused too. Cross-collection data is fetched with a second scoped query instead (ADR-040).
+
+### Polling instead of sockets
+
+The client polls the unread count every 30 s (paused while the tab is hidden, refreshed on focus). No WebSocket, push or email channel exists, so there is no extra authenticated long-lived connection to secure (ADR-037).
+
 ## Known limitations
 
 - **No email OTP verification in the MVP.** Student registration is controlled by the college email domain plus the college's join code (the pilot control, ADR-012). Someone who knows the join code could register with an address on the college's domain that they do not own. Mitigations: rotate the join code, disable accounts, add email verification later.
@@ -214,6 +236,8 @@ Signals, related cases, `textHash`, `linked` events and source-case links are se
 - PDFs are not sanitised (they may carry author metadata or active content); they are only downloaded as attachments under `CSP: sandbox` and opened in the user's own viewer.
 - Images are not decoded or re-encoded: metadata segments are removed, but pixel content (e.g. a visible ID card in a screenshot) is not inspected. Students are asked to crop IDs out.
 - No malware scanning of uploads in the MVP.
+- Notifications are in-app only (no email/SMS); a student who never signs in will not see advisories.
+- The student-identity check on advisories matches the exact name and email only; staff must still avoid other identifying details.
 - Look-alike detection is heuristic (ADR-030): it can miss novel tricks and can flag legitimate sister domains until they are added to the recruiter.
 - Recruiter verification relies on the staff member's evidence note; there is no automated domain ownership check (no DNS/RDAP in the MVP).
 - Decisions are recorded by a single TPO head; there is no second-person approval (ADR-024).

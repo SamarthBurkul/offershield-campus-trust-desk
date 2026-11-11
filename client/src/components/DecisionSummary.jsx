@@ -52,7 +52,16 @@ function DecisionDetails({ decision }) {
 }
 
 /** Closed-case summary for staff, with the decision history and (for the head) a Reopen button. */
-export default function DecisionSummary({ decision, history = [], canReopen, onReopen, canAddRecruiter = false, onAddRecruiter }) {
+export default function DecisionSummary({
+  decision,
+  history = [],
+  canReopen,
+  onReopen,
+  canAddRecruiter = false,
+  onAddRecruiter,
+  canDraftAdvisory = false,
+  onDraftAdvisory,
+}) {
   return (
     <Card title="Decision">
       {decision ? (
@@ -65,6 +74,7 @@ export default function DecisionSummary({ decision, history = [], canReopen, onR
       )}
       <div className="flex flex-wrap gap-2">
         {canAddRecruiter && <Button onClick={onAddRecruiter}>Add to recruiter registry</Button>}
+        {canDraftAdvisory && <Button onClick={onDraftAdvisory}>Draft advisory from this case</Button>}
         {canReopen && (
           <Button variant="secondary" onClick={onReopen}>
             Reopen case

@@ -4,7 +4,7 @@ const { isValidObjectId } = require('mongoose');
 const AppError = require('../utils/AppError');
 const { caseRepository } = require('../repositories');
 const { normalizeDomain, normalizeEmail, normalizePhone, normalizeUpi, normalizeUrl } = require('./indicators/normalize');
-const { findCaseOr404, transition, addEvent, recordAudit } = require('./staffCase.service');
+const { findCaseOr404, transition, addEvent, recordAudit, notifyStudent } = require('./staffCase.service');
 const indicatorRegistry = require('./registry/indicator.service');
 
 const NORMALIZERS = {
@@ -117,6 +117,8 @@ async function recordDecision(user, caseId, input, { ip }) {
   if (input.type === 'confirmed_fraud') {
     await indicatorRegistry.publishFromDecision(user, found._id, decision.confirmedIndicators, { ip });
   }
+  // Only the student-visible message goes into the notification (never the basis or checks).
+  await notifyStudent(user, found, 'case_decision', { studentMessage: input.studentMessage });
 }
 
 /**
@@ -148,6 +150,8 @@ async function reopenCase(user, caseId, { reason }, { ip }) {
   if (previous?.type === 'confirmed_fraud' && previous.confirmedIndicators?.length) {
     await indicatorRegistry.revokeForReopenedCase(user, found._id, previous.confirmedIndicators, { ip });
   }
+  // Generic text only: the reopen reason stays staff-only.
+  await notifyStudent(user, found, 'case_reopened');
 }
 
 module.exports = { recordDecision, reopenCase };

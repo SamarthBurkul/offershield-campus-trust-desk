@@ -10,6 +10,8 @@ const { createOfficerSchema, officerStatusSchema } = require('../validators/staf
 const { createStaffCaseRouter } = require('./staffCase.routes');
 const { createAuditRouter } = require('./audit.routes');
 const { createRegistryRouter } = require('./registry.routes');
+const { createStaffAdvisoryRouter } = require('./advisory.routes');
+const { createStatsRouter } = require('./stats.routes');
 
 function createStaffRouter({ config, authenticate }) {
   const router = Router();
@@ -19,6 +21,8 @@ function createStaffRouter({ config, authenticate }) {
   router.use('/cases', createStaffCaseRouter({ config }));
   router.use('/audit', createAuditRouter());
   router.use('/registry', createRegistryRouter({ config }));
+  router.use('/advisories', createStaffAdvisoryRouter());
+  router.use('/stats', createStatsRouter({ config }));
 
   router.get('/members', requireRole('tpo_head', 'placement_officer'), controller.listMembers);
   router.post('/officers', requireRole('tpo_head'), validateBody(createOfficerSchema), controller.createOfficer);

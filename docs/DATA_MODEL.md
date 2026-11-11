@@ -1,6 +1,6 @@
 # Data Model
 
-> **Status:** Phases 2–5 collections are **implemented**: `colleges`, `users`, `auditlogs`; `counters`, `cases`, `caseevents`, `evidences` + GridFS `evidence`; `notes`; `fraudindicators`, `recruiters`, `lookupevents`. Other collections (advisories, notifications) are planned.
+> **Status:** Phases 2–6 collections are **implemented**: `colleges`, `users`, `auditlogs`; `counters`, `cases`, `caseevents`, `evidences` + GridFS `evidence`; `notes`; `fraudindicators`, `recruiters`, `lookupevents`; `advisories`, `acknowledgements`, `notifications`.
 
 ## Global rules
 
@@ -239,15 +239,51 @@ Indexes: `{ collegeId, status }`, `{ collegeId, domains }`, `{ collegeId, contac
 
 `textHash`: 64-bit SimHash (16 hex) of the normalised `messageText`. Index `{ collegeId, createdAt: -1, textHash: 1 }`.
 
+## Implemented in Phase 6
+
+### `advisories` — model `Advisory`
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId` | ObjectId | required |
+| `title` | String | 5–120 |
+| `body` | String | 20–3000; privacy guard (PAN/Aadhaar) and, when `sourceCaseId` is set, must not contain the reporting student's name or email |
+| `severity` | String | info, warning or critical |
+| `target` | { years: [1–5], branches: [college branches] } | empty arrays mean everyone |
+| `indicatorIds` | [ObjectId → FraudIndicator] | ≤ 20; must be ACTIVE indicators of the college when saved and when published |
+| `sourceCaseId` | ObjectId or null | a confirmed_fraud case of the same college (staff-only) |
+| `status` | String | draft, published or withdrawn |
+| `createdBy`, `updatedBy`, `publishedBy`, `publishedAt` | | |
+| `audienceCountAtPublish` | Number or null | students notified at publish (ack-rate denominator) |
+| `withdrawnBy`, `withdrawnAt`, `withdrawReason` | | staff-only |
+| `expiresAt` | Date or null | must be in the future when set |
+| timestamps | | |
+
+Index `{ collegeId, status, publishedAt: -1 }`. Published advisories are immutable (withdraw + publish a new one).
+
+### `acknowledgements` — model `Acknowledgement`
+
+`collegeId`, `advisoryId`, `userId`, `year`, `branch`, `createdAt`. `year`/`branch` are a snapshot at acknowledgement time so staff get count-only breakdowns without joining student records. Unique `{ advisoryId, userId }` (idempotent acks); index `{ collegeId, advisoryId }`.
+
+### `notifications` — model `Notification`
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId`, `userId` | ObjectId | every query filters both |
+| `type` | String | case_info_requested, case_staff_message, case_decision, case_reopened, case_submitted, case_student_reply, case_assigned, case_recommendation, advisory_published |
+| `title`, `body` | String | ≤ 120 / ≤ 300, rendered only by `services/notifications/templates.js` |
+| `link` | String | internal path (`/…`, never `//` or a URL) |
+| `refType`, `refId` | case or advisory | |
+| `readAt` | Date or null | |
+| `createdAt` | Date | TTL: deleted after 180 days |
+
+Indexes: `{ collegeId, userId, readAt, createdAt: -1 }`; TTL `{ createdAt: 1 }` with `expireAfterSeconds` = 15 552 000.
+
 ## Planned collections
 
 | Collection | Phase | Purpose | Key fields |
 | --- | --- | --- | --- |
-| `advisories` | 6 | TPO-published advisories | `collegeId`, `title`, `body`, `severity`, `audience`, `publishedBy`, `status` |
-| `acknowledgements` | 6 | Student acknowledgement of advisories | `collegeId`, `advisoryId`, `userId` (unique with `advisoryId`) |
-| `notifications` | 6 | In-app notifications | `collegeId`, `userId`, `type`, `title`, `link`, `readAt` |
 
 ## Key indexes (planned)
 
 - `{ collegeId: 1, ... }` as the leading key on every college-owned collection.
-- `acknowledgements`: `{ advisoryId: 1, userId: 1 }` unique.

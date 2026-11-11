@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deskErrorMessage, errorMessage } from '../api/errors.js'
 import { createRecruiter } from '../api/registry.js'
 import * as staffCases from '../api/staffCases.js'
@@ -21,6 +21,8 @@ import SignalsPanel from '../components/SignalsPanel.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Button, Card, ErrorAlert } from '../components/ui.jsx'
 import { CHANNEL_LABELS, MONEY_PURPOSE_LABELS, PRIORITY_LABELS, isClosedStatus } from '../constants/caseStatus.js'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
 
 const yesNo = (value) => (value ? 'Yes' : 'No')
 
@@ -34,7 +36,9 @@ function Detail({ term, children }) {
 }
 
 export default function StaffCaseDetailPage() {
+  usePageTitle('Case')
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [data, setData] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -87,7 +91,7 @@ export default function StaffCaseDetailPage() {
       </div>
     )
   }
-  if (!data) return <p className="text-slate-600">Loading…</p>
+  if (!data) return <Skeleton rows={5} label="Loading case" />
 
   const isHead = user.role === ROLES.TPO_HEAD
   const closed = isClosedStatus(data.status)
@@ -217,6 +221,8 @@ export default function StaffCaseDetailPage() {
               onReopen={() => setReopening(true)}
               canAddRecruiter={isHead && data.decision?.type === 'verified_genuine'}
               onAddRecruiter={() => setAddingRecruiter(true)}
+              canDraftAdvisory={data.decision?.type === 'confirmed_fraud'}
+              onDraftAdvisory={() => navigate(`/staff/advisories/new?fromCase=${data.id}`)}
             />
           ) : isHead ? (
             <>

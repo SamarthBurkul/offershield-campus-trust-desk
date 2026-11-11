@@ -57,6 +57,9 @@ Routers are built per app instance (`createApp(config)`), so tests can create ap
 | `/staff/audit` | inherits `/staff`, then `requireRole('tpo_head')` and `validateQuery` |
 | `/staff/registry` | inherits `/staff`, then `requireRole('placement_officer', 'tpo_head')`; approve/renew/suspend/revoke add `requireRole('tpo_head')` |
 | `/lookup` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student', 'placement_officer', 'tpo_head')`, per-user `lookupRateLimiter`, `validateQuery` |
+| `/staff/advisories`, `/staff/stats` | inherit `/staff`, then `requireRole('placement_officer', 'tpo_head')`; publish/withdraw add `requireRole('tpo_head')` |
+| `/advisories` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student')` |
+| `/notifications` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student', 'placement_officer', 'tpo_head')` |
 | `/files` | `authenticate`, `enforcePasswordChange`; the controller verifies the link token against the session user |
 
 ## Layering
@@ -67,8 +70,8 @@ routes → controllers → services → repositories → models
 
 - **routes**: URL + method → middleware chain → controller. No logic.
 - **controllers**: map request to service input and service output to response; set/clear the session cookie. No Mongoose calls.
-- **services** (`auth`, `admin`, `staff`, `audit`, `case`, `evidence`, `storage` (GridFS wrapper), `indicators/`, `caseStateMachine`, `staffCase`, `note`, `decision`, `auditQuery`, `registry/` (similarity, recruiter, indicator), `lookup`, `signals/` (compute, feeLanguage, loader), `linking/` (simhash, link)): business rules and audit writes after successful actions.
-- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`, `counterRepository`, `caseRepository`, `caseEventRepository`, `evidenceRepository`, `noteRepository`, `auditLogRepository` (read-only use), `fraudIndicatorRepository`, `recruiterRepository`, `lookupEventRepository`). All college-scoped reads and writes go through it.
+- **services** (`auth`, `admin`, `staff`, `audit`, `case`, `evidence`, `storage` (GridFS wrapper), `indicators/`, `caseStateMachine`, `staffCase`, `note`, `decision`, `auditQuery`, `registry/` (similarity, recruiter, indicator), `lookup`, `signals/` (compute, feeLanguage, loader), `linking/` (simhash, link), `advisory`, `stats`, `notifications/` (notify, templates)): business rules and audit writes after successful actions.
+- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`, `counterRepository`, `caseRepository`, `caseEventRepository`, `evidenceRepository`, `noteRepository`, `auditLogRepository` (read-only use), `fraudIndicatorRepository`, `recruiterRepository`, `lookupEventRepository`, `advisoryRepository`, `acknowledgementRepository`, `notificationRepository`). Tenant repositories also offer a guarded `aggregate` (always `$match: { collegeId }` first; no cross-collection stages) and `insertMany`/`updateMany`. All college-scoped reads and writes go through it.
 - **models**: Mongoose schemas `College`, `User`, `AuditLog`, `Counter`, `Case`, `CaseEvent`, `Evidence` (+ GridFS bucket `evidence`), `Note`; `models/plugins/appendOnly.js` makes `AuditLog` and `Note` append-only.
 - **validators**: zod `.strict()` body schemas.
 - **utils**: `password` (bcrypt + policy), `jwt` (sign/verify, cookie options), `tokens` (join codes, temporary passwords), `safeUser` (the single `toSafeUser()` mapper).

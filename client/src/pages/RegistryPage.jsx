@@ -9,6 +9,9 @@ import RecruiterForm from '../components/RecruiterForm.jsx'
 import { Button, Card, CheckboxField, ErrorAlert, TextAreaField } from '../components/ui.jsx'
 import { INDICATOR_TYPE_LABELS } from '../constants/caseStatus.js'
 import { RECRUITER_STATUS_LABELS, VERIFICATION_METHOD_LABELS } from '../constants/verificationMethods.js'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
+import EmptyState from '../components/EmptyState.jsx'
 
 const TABS = [
   { value: 'recruiters', label: 'Recruiters' },
@@ -118,7 +121,8 @@ function RecruitersTab({ isHead }) {
         <Button onClick={() => setCreating(true)}>Add recruiter</Button>
       )}
       <ErrorAlert message={error} />
-      {result?.recruiters.length === 0 && <p className="text-sm text-slate-600">No recruiters in the registry yet.</p>}
+      {!result && !error && <Skeleton rows={3} label="Loading recruiters" />}
+      {result?.recruiters.length === 0 && <EmptyState title="No recruiters in the registry yet." />}
       {result?.recruiters.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -218,7 +222,8 @@ function IndicatorsTab({ isHead }) {
     <div className="space-y-4">
       <p className="text-sm text-slate-600">Created only by TPO-head confirmed_fraud decisions; revoked automatically when the source cases are reopened.</p>
       <ErrorAlert message={error} />
-      {result?.indicators.length === 0 && <p className="text-sm text-slate-600">No confirmed indicators yet.</p>}
+      {!result && !error && <Skeleton rows={3} label="Loading indicators" />}
+      {result?.indicators.length === 0 && <EmptyState title="No confirmed indicators yet.">They appear when the TPO head confirms a fraud case.</EmptyState>}
       {result?.indicators.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -283,6 +288,7 @@ function IndicatorsTab({ isHead }) {
 }
 
 export default function RegistryPage() {
+  usePageTitle('Registry')
   const { user } = useAuth()
   const isHead = user.role === ROLES.TPO_HEAD
   const [tab, setTab] = useState('recruiters')

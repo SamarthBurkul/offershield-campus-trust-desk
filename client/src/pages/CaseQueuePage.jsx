@@ -8,6 +8,9 @@ import { Button, Card, ErrorAlert } from '../components/ui.jsx'
 import { CHANNEL_LABELS } from '../constants/caseStatus.js'
 import { SIGNAL_LABELS } from '../constants/verificationMethods.js'
 import { relativeTime } from '../utils/time.js'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
+import EmptyState from '../components/EmptyState.jsx'
 
 const FILTER_KEYS = ['status', 'priority', 'assignee', 'channel', 'q', 'page']
 const PAGE_SIZE = 20
@@ -21,6 +24,7 @@ function PriorityBadge({ priority }) {
 }
 
 export default function CaseQueuePage() {
+  usePageTitle('Case desk')
   const [searchParams, setSearchParams] = useSearchParams()
   const values = Object.fromEntries(FILTER_KEYS.map((name) => [name, searchParams.get(name) ?? '']))
   const page = Number(values.page) || 1
@@ -64,8 +68,8 @@ export default function CaseQueuePage() {
 
       <Card>
         <ErrorAlert message={error} />
-        {!result && !error && <p className="text-slate-600">Loading…</p>}
-        {result?.cases.length === 0 && <p className="text-slate-600">No cases match these filters.</p>}
+        {!result && !error && <Skeleton rows={5} label="Loading cases" />}
+        {result?.cases.length === 0 && <EmptyState title="No cases match these filters.">Try another tab or clear the search.</EmptyState>}
         {result?.cases.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

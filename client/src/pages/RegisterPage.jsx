@@ -4,10 +4,12 @@ import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import { Button, Card, ErrorAlert, SelectField, TextField } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 const EMPTY = { name: '', email: '', password: '', collegeCode: '', joinCode: '', year: '1', branch: '' }
 
 export default function RegisterPage() {
+  usePageTitle('Student registration')
   const { user, loading, register } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState(EMPTY)

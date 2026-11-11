@@ -5,6 +5,7 @@ import { errorMessage } from '../api/errors.js'
 import { ROLE_LABELS } from '../auth/roles.js'
 import { Button, Card, ErrorAlert, OneTimeSecret, SelectField, StatusBadge, TextField } from '../components/ui.jsx'
 import { splitList } from '../utils/lists.js'
+import Skeleton from '../components/Skeleton.jsx'
 
 const toForm = (college) => ({
   name: college.name,
@@ -45,7 +46,7 @@ export default function AdminCollegeDetailPage() {
       </div>
     )
   }
-  if (!college) return <p className="text-slate-600">Loading…</p>
+  if (!college) return <Skeleton rows={4} label="Loading college" />
 
   return (
     <div className="space-y-6">

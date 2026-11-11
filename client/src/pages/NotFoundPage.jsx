@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 export default function NotFoundPage() {
+  usePageTitle('Page not found')
   return (
     <section className="space-y-3 text-center">
       <h1 className="text-2xl font-bold text-slate-900">Page not found</h1>

@@ -6,13 +6,41 @@
 | 2 | MongoDB, authentication, four roles, college tenancy and isolation, staff management, append-only audit log, seed scripts | **Passed (architect-reviewed 2026-11-10)** |
 | 3 | Student verification requests, evidence (GridFS), indicator extraction | **Passed (architect-reviewed 2026-11-10)** |
 | 4 | TPO investigation desk, decisions, audit trail | **Passed (architect-reviewed 2026-11-10)** |
-| 5 | Registry, lookup, look-alike detection, related-case linking, warning signals | **Implemented — awaiting architect review** |
-| 6 | Advisories, notifications, stats | Not started |
+| 5 | Registry, lookup, look-alike detection, related-case linking, warning signals | **Passed (architect-reviewed 2026-11-11)** |
+| 6 | Advisories, notifications, stats, UI polish | **Implemented — awaiting architect review** |
 | 7 | Security test suite, deployment (one Render web service), docs | Not started |
+
+## Phase 6 — details
+
+**Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- `Advisory`, `Acknowledgement`, `Notification` (180-day TTL) models; guarded `tenantRepository.aggregate`.
+- Advisories: officer drafts, head-only publish/withdraw, targeting by year/branch, active-indicator and student-identity checks, privacy guard, notification fan-out, idempotent acks with count-only breakdowns, `needsReview` on revoked indicators, withdrawn state for notified students.
+- Notifications: template allow-list, 9 triggers from existing services (actor never notified, failures never break the action), inbox API.
+- Stats: cases, decisions (median hours), money, registry, lookups, advisories, related links.
+- Client: notification bell (30 s polling), notifications page, student advisory banner and pages, staff advisories list/editor (target picker, indicator picker, live audience, student preview, publish confirmation), "Draft advisory from this case", stats page with CSS bars, public landing page, page titles, skeletons/empty states, new footer.
+
+### Tests executed (2026-11-11, Node v22.13.1, MongoDB 8.2.6 in memory)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm run test:server` | Test Suites: 30 passed, 30 total; Tests: 344 passed, 344 total | 0 |
+| `npm run test:client` | Test Files 10 passed (10); Tests 45 passed (45) | 0 |
+| `npm test` | 344 server + 45 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | `client/dist` produced | 0 |
+| Browser smoke | headless Chrome through the UI against a local in-memory MongoDB seeded with the demo accounts (Atlas rejected this machine's IP on 2026-11-11) | — |
+
+### Limitations
+
+- In-app notifications only; 30 s polling delay.
+- Browser smoke not yet repeated against Atlas (see final report).
 
 ## Phase 5 — details
 
-**Status:** Implemented — awaiting architect review (not yet passed).
+**Status:** Passed (architect-reviewed 2026-11-11).
 
 ### Implemented
 
@@ -144,4 +172,4 @@
 - React 19 + Vite 8 + Tailwind v4 client shell with HealthStatus and a single axios instance.
 - Tests at sign-off: server 18/18, client 5/5; build and lint exit 0.
 
-**Next authorised phase:** none until architect approval of Phase 5.
+**Next authorised phase:** none until architect approval of Phase 6.

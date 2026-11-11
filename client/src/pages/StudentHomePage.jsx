@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { listAdvisories } from '../api/advisories.js'
 import { useAuth } from '../auth/useAuth.js'
+import AdvisoryBanner from '../components/AdvisoryBanner.jsx'
 import LookupBox from '../components/LookupBox.jsx'
 import { Card } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 const STEPS = [
   "Search your college's registry of reviewed recruiters and confirmed suspicious indicators.",
@@ -24,13 +28,31 @@ function ActionCard({ to, title, children }) {
 }
 
 export default function StudentHomePage() {
+  usePageTitle('Home')
   const { user, college } = useAuth()
+  const [advisories, setAdvisories] = useState([])
+
+  useEffect(() => {
+    let active = true
+    listAdvisories()
+      .then((items) => active && setAdvisories(items))
+      .catch(() => active && setAdvisories([]))
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <div className="space-y-6">
       <section className="space-y-1">
         <h1 className="text-2xl font-bold text-slate-900">Welcome, {user.name}</h1>
         {college && <p className="text-slate-600">{college.name}</p>}
       </section>
+
+      <AdvisoryBanner
+        advisories={advisories}
+        onAcknowledged={(id) => setAdvisories((items) => items.map((item) => (item.id === id ? { ...item, acknowledged: true } : item)))}
+      />
 
       <LookupBox />
 

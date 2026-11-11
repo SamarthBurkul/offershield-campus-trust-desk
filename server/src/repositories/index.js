@@ -11,6 +11,9 @@ const { AuditLog } = require('../models/AuditLog');
 const { FraudIndicator } = require('../models/FraudIndicator');
 const { Recruiter } = require('../models/Recruiter');
 const { LookupEvent } = require('../models/LookupEvent');
+const { Advisory } = require('../models/Advisory');
+const { Acknowledgement } = require('../models/Acknowledgement');
+const { Notification } = require('../models/Notification');
 
 // College-owned collections. Services reach these models only through these repositories.
 const userRepository = createTenantRepository(User);
@@ -25,6 +28,10 @@ const auditLogRepository = createTenantRepository(AuditLog);
 const fraudIndicatorRepository = createTenantRepository(FraudIndicator);
 const recruiterRepository = createTenantRepository(Recruiter);
 const lookupEventRepository = createTenantRepository(LookupEvent);
+const advisoryRepository = createTenantRepository(Advisory);
+const acknowledgementRepository = createTenantRepository(Acknowledgement);
+// Always additionally filtered by userId in notification services.
+const notificationRepository = createTenantRepository(Notification);
 
 module.exports = {
   userRepository,
@@ -37,4 +44,7 @@ module.exports = {
   fraudIndicatorRepository,
   recruiterRepository,
   lookupEventRepository,
+  advisoryRepository,
+  acknowledgementRepository,
+  notificationRepository,
 };

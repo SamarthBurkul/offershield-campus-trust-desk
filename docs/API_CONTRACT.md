@@ -47,6 +47,10 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | 409 | `CONFLICTS_WITH_FRAUD_INDICATOR` | A recruiter domain/contact is an active confirmed fraud indicator |
 | 409 | `INVALID_STATE` | Recruiter is not in a state that allows the action (approve/renew/suspend) |
 | 409 | `ALREADY_REVOKED` | Revoking an already revoked indicator |
+| 400 | `INVALID_INDICATOR` | Advisory links an indicator that is not ACTIVE in your college (on save or publish) |
+| 400 | `INVALID_SOURCE_CASE` | Advisory source case is not a confirmed_fraud case of your college |
+| 400 | `CONTAINS_STUDENT_IDENTITY` | Advisory title/body contains the reporting student's name or email |
+| 409 | `ADVISORY_NOT_EDITABLE` | Editing/publishing a non-draft, or withdrawing a non-published advisory |
 | 409 | `CASE_CLOSED` | Reply, upload, staff message, info request, assignment or recommendation on a closed case |
 | 409 | `INVALID_TRANSITION` | The case is not in a status that allows this action (e.g. a concurrent decision won) |
 | 413 | `FILE_TOO_LARGE` | An evidence file is over 3 MB |
@@ -131,6 +135,21 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | GET | `/staff/registry/indicators` | placement_officer, tpo_head | 200 | 400, 401, 403 |
 | POST | `/staff/registry/indicators/:id/revoke` | tpo_head | 200 | 400, 401, 403, 404, 409 `ALREADY_REVOKED` |
 | GET | `/lookup` | student, placement_officer, tpo_head | 200 | 400, 401, 403, 429 |
+| GET | `/staff/advisories` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| GET | `/staff/advisories/audience-count` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| POST | `/staff/advisories` | placement_officer, tpo_head | 201 | 400 (incl. `INVALID_INDICATOR`, `INVALID_SOURCE_CASE`, `CONTAINS_STUDENT_IDENTITY`, `SENSITIVE_ID_DETECTED`), 401, 403 |
+| GET | `/staff/advisories/:id` | placement_officer, tpo_head | 200 | 401, 403, 404 |
+| PATCH | `/staff/advisories/:id` | author or tpo_head (drafts) | 200 | 400, 401, 403, 404, 409 `ADVISORY_NOT_EDITABLE` |
+| POST | `/staff/advisories/:id/publish` | tpo_head | 200 | 400 `INVALID_INDICATOR`, 401, 403, 404, 409 |
+| POST | `/staff/advisories/:id/withdraw` | tpo_head | 200 | 400, 401, 403, 404, 409 |
+| GET | `/advisories` | student | 200 | 401, 403 |
+| GET | `/advisories/:id` | student | 200 | 401, 403, 404 |
+| POST | `/advisories/:id/ack` | student | 200 | 401, 403, 404 |
+| GET | `/notifications` | student, placement_officer, tpo_head | 200 | 400, 401, 403 |
+| GET | `/notifications/unread-count` | student, placement_officer, tpo_head | 200 | 401, 403 |
+| POST | `/notifications/:id/read` | owner | 200 | 401, 403, 404 |
+| POST | `/notifications/read-all` | student, placement_officer, tpo_head | 200 | 401, 403 |
+| GET | `/staff/stats` | placement_officer, tpo_head | 200 | 400, 401, 403 |
 | GET | `/files/:token` | the user the link was issued to (session required) | 200 (file stream) | 401 `UNAUTHENTICATED` / `LINK_INVALID`, 404 |
 
 Any authenticated route can also return `403 PASSWORD_CHANGE_REQUIRED` (except the three allowed auth routes).
@@ -415,8 +434,48 @@ StaffCaseView now also has `signals`, `signalsComputedAt` and `related [{ caseId
 - `confirmed_fraud`: before the atomic update, any confirmed indicator whose domain (domain, email domain or URL host) belongs to a verified recruiter → 409 `CONFLICTS_WITH_VERIFIED_RECRUITER` with `details`. After the update: each confirmed indicator is upserted active with the case as a source; audit `indicator.publish`; open cases carrying them get signals recomputed.
 - Reopen of a confirmed_fraud case: the case is removed as a source; indicators left with no source are revoked (`source_case_reopened`); audit `indicator.revoke`; signals recomputed.
 
+### Advisories, notifications and stats (Phase 6)
+
+#### Staff advisories (`/staff/advisories`)
+
+- `GET /` — `status`, `page`, `limit ≤ 50`. Items: `{ id, title, body, severity, target, indicators [{ id, type, value, status }], indicatorIds, sourceCaseId, status, needsReview, publishedAt, withdrawnAt, withdrawReason, expiresAt, audienceCount, acknowledgedCount, ackRate, … }`. `needsReview` is true when any linked indicator is no longer active. `audienceCount` is live for drafts and the notified count for published advisories.
+- `GET /audience-count?years=1,2&branches=COMP` → `{ audienceCount }` (active students; empty = all).
+- `POST /` — `{ title, body, severity?, target?, indicatorIds?, sourceCaseId?, expiresAt? }` → draft. Validations: branches of the college; indicators ACTIVE in the college; source case confirmed_fraud in the college; privacy guard on title/body; no student name/email when `sourceCaseId` is set; `expiresAt` in the future. Audit `advisory.create`.
+- `GET /:id` — staff view plus `acknowledgementBreakdown { byYear [{ year, count }], byBranch [{ branch, count }] }` (counts only).
+- `PATCH /:id` — drafts only (409 `ADVISORY_NOT_EDITABLE`), author or head (403). Same validations. Audit `advisory.update` (field names).
+- `POST /:id/publish` (head) — draft only; indicators must still be active; sets published/publishedBy/publishedAt/audienceCountAtPublish; fans out `advisory_published` notifications (insertMany in batches of 500). Audit `advisory.publish { audienceCount, indicatorCount }`.
+- `POST /:id/withdraw` (head) `{ reason 10–500 }` — published only. Audit `advisory.withdraw`.
+
+#### Student advisories (`/advisories`, student only)
+
+- `GET /` → `{ advisories: [{ id, status, title, body, severity, publishedAt, acknowledged, indicators [{ type, value }] }] }` — published, not expired, targeted at the student's year and branch; unacknowledged first (critical first), then newest. Only ACTIVE indicators; never `sourceCaseId`, authors or withdrawn advisories.
+- `GET /:id` — same shape; 404 when not visible, except `{ advisory: { id, status: 'withdrawn' } }` for a withdrawn advisory the student was notified about.
+- `POST /:id/ack` → `{ acknowledged: true }`, idempotent; 404 when not visible.
+
+#### Notifications (`/notifications`; students and staff; super admin 403)
+
+- `GET /?unread=true&page=&limit=` → `{ notifications: [{ id, type, title, body, link, read, createdAt }], page, limit, total, unreadCount }`.
+- `GET /unread-count` → `{ unreadCount }`; `POST /:id/read` (another user's or college's id → 404); `POST /read-all` → `{ updated }`.
+
+| Event | Recipients | Type | Link |
+| --- | --- | --- | --- |
+| Student creates a case | all active staff | case_submitted | /staff/cases/:id |
+| Student replies | the active assignee, else all active staff | case_student_reply | /staff/cases/:id |
+| Info request | the student | case_info_requested | /student/requests/:id |
+| Staff message | the student | case_staff_message | /student/requests/:id |
+| Decision | the student (includes the student message, ≤ 200 chars) | case_decision | /student/requests/:id |
+| Reopen | the student (generic text) | case_reopened | /student/requests/:id |
+| Assignment | the new assignee | case_assigned | /staff/cases/:id |
+| Recommendation | all active TPO heads | case_recommendation | /staff/cases/:id |
+| Advisory published | targeted active students | advisory_published | /advisories/:id |
+
+The actor is never notified about their own action. Delivery is in-app only; the client polls `unread-count` every 30 s.
+
+#### `GET /staff/stats?from=&to=` (placement_officer, tpo_head; default last 90 days)
+
+`{ stats: { range, cases: { byStatus, byChannel, createdPerWeek [8 × { week: 'YYYY-Www', weekStart, count }], openCount, staleOpenCount, unassignedOpenCount }, decisions: { byType, medianHoursToDecision }, money: { casesWithFeeRequested, totalAmountRequested, studentsReportedPaid }, registry: { activeFraudIndicators, verifiedRecruiters, expiredRecruiters, pendingRecruiters }, lookups: { <resultStatus>: count }, advisories: { publishedCount, overallAckRate }, relatedCaseLinks } }`. Range-based: case breakdowns, money, lookups and relatedCaseLinks (by createdAt) and decisions (by decidedAt). Current snapshot: open/stale/unassigned counts, registry and advisories.
+
 ## Planned route groups (not implemented)
 
 | Group | Phase | Purpose |
 | --- | --- | --- |
-| `/api/v1/advisories`, `/api/v1/notifications`, `/api/v1/stats` | 6 | Advisories, notifications, statistics |

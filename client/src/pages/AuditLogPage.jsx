@@ -3,6 +3,9 @@ import { listAuditEntries } from '../api/audit.js'
 import { errorMessage } from '../api/errors.js'
 import { ROLE_LABELS } from '../auth/roles.js'
 import { Button, Card, ErrorAlert, TextField } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
+import EmptyState from '../components/EmptyState.jsx'
 
 const PAGE_SIZE = 50
 const EMPTY = { action: '', entityId: '', from: '', to: '' }
@@ -14,6 +17,7 @@ const describeMetadata = (metadata) =>
 
 /** TPO head: the college's append-only audit trail. */
 export default function AuditLogPage() {
+  usePageTitle('Audit log')
   const [draft, setDraft] = useState(EMPTY)
   const [filters, setFilters] = useState(EMPTY)
   const [page, setPage] = useState(1)
@@ -65,8 +69,8 @@ export default function AuditLogPage() {
 
       <Card>
         <ErrorAlert message={error} />
-        {!result && !error && <p className="text-slate-600">Loading…</p>}
-        {result?.entries.length === 0 && <p className="text-slate-600">No entries match.</p>}
+        {!result && !error && <Skeleton rows={5} label="Loading audit log" />}
+        {result?.entries.length === 0 && <EmptyState title="No entries match.">Try a wider date range or clear the filters.</EmptyState>}
         {result?.entries.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

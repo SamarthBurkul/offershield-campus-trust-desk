@@ -24,6 +24,20 @@ function assertNoCollegeIdChange(update) {
   }
 }
 
+// Stages that can read or write other collections (and so other tenants), or hide them inside sub-pipelines.
+const FORBIDDEN_STAGES = Object.freeze(['$lookup', '$graphLookup', '$unionWith', '$out', '$merge', '$facet']);
+
+function assertSafePipeline(pipeline) {
+  if (!Array.isArray(pipeline)) throw new TenantScopeError('Aggregation pipeline must be an array');
+  for (const stage of pipeline) {
+    const name = stage && typeof stage === 'object' ? Object.keys(stage)[0] : null;
+    if (!name || Object.keys(stage).length !== 1) throw new TenantScopeError('Each pipeline stage must have exactly one operator');
+    if (FORBIDDEN_STAGES.includes(name)) {
+      throw new TenantScopeError(`${name} is not allowed in tenant aggregations; run a second scoped query instead`);
+    }
+  }
+}
+
 /**
  * Wrap a college-owned model so every query is confined to one college.
  * The session's collegeId is AND-ed into every filter and overrides any collegeId in it.
@@ -80,11 +94,26 @@ function createTenantRepository(Model) {
           setDefaultsOnInsert: true,
         }).exec();
       },
+      updateMany(filter, update) {
+        assertNoCollegeIdChange(update);
+        return Model.updateMany(scope(filter), update, { runValidators: true }).exec();
+      },
       deleteOne(filter) {
         return Model.deleteOne(scope(filter)).exec();
       },
       deleteMany(filter) {
         return Model.deleteMany(scope(filter)).exec();
+      },
+      /**
+       * Aggregation confined to this college: { $match: { collegeId } } is always the first stage, and
+       * stages that could reach other collections are refused.
+       */
+      aggregate(pipeline) {
+        assertSafePipeline(pipeline);
+        return Model.aggregate([{ $match: { collegeId } }, ...pipeline]).exec();
+      },
+      insertMany(docs) {
+        return Model.insertMany(docs.map((doc) => ({ ...doc, collegeId })), { ordered: false });
       },
       create(doc) {
         return Model.create({ ...doc, collegeId });
@@ -95,4 +124,4 @@ function createTenantRepository(Model) {
   return Object.freeze({ forTenant });
 }
 
-module.exports = { createTenantRepository, TenantScopeError };
+module.exports = { createTenantRepository, TenantScopeError, FORBIDDEN_STAGES };

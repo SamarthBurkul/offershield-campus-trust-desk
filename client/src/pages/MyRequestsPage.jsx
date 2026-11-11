@@ -5,8 +5,12 @@ import { errorMessage } from '../api/errors.js'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Card, ErrorAlert, SelectField } from '../components/ui.jsx'
 import { CHANNEL_LABELS, STUDENT_STATUS_LABELS } from '../constants/caseStatus.js'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
+import EmptyState from '../components/EmptyState.jsx'
 
 export default function MyRequestsPage() {
+  usePageTitle('My requests')
   const [status, setStatus] = useState('')
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -49,8 +53,8 @@ export default function MyRequestsPage() {
           </SelectField>
         </div>
         <ErrorAlert message={error} />
-        {!result && !error && <p className="text-slate-600">Loading…</p>}
-        {result?.cases.length === 0 && <p className="text-slate-600">No requests yet.</p>}
+        {!result && !error && <Skeleton rows={3} label="Loading your requests" />}
+        {result?.cases.length === 0 && <EmptyState title="No requests yet.">If an offer looks suspicious, ask your placement cell to verify it.</EmptyState>}
         {result?.cases.length > 0 && (
           <ul className="divide-y divide-slate-100">
             {result.cases.map((item) => (

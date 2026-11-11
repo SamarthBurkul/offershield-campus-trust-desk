@@ -2,7 +2,14 @@
 
 OfferShield is a Campus Recruitment Trust & Verification Desk for colleges. Students can search their college's reviewed recruiter records and confirmed suspicious indicators, and submit structured verification requests, with evidence, for suspicious external job or internship offers. Placement staff investigate each request as a case, the TPO head records the final decision with reasons, confirmed findings go into the college's registry, and the TPO publishes targeted advisories to students. It is multi-tenant (one tenant = one college) and is **not** a scam-detecting AI, placement ERP, job portal, recruiter marketplace or ATS — automated checks only assist staff and never decide whether an offer is genuine.
 
-> **Status:** Phases 1–4 passed review; Phase 5 (registry, lookup, look-alike detection, related-case linking, warning signals) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
+> **Status:** Phases 1–5 passed review; Phase 6 (advisories, notifications, stats, UI polish) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
+
+## What it does
+
+- **Students:** "check before you pay" against the college registry → ask the placement cell to verify a suspicious offer with screenshots → follow the request, reply to questions and see the outcome → read targeted advisories and confirm with "I've read this".
+- **Placement officers:** triage the case desk (filters, look-alike and fee signals, related cases), request information, keep internal notes, recommend an outcome, draft advisories.
+- **TPO head:** record evidence-based decisions, maintain the verified-recruiter and confirmed-fraud registries, publish advisories to the batches at risk, and track impact on the stats page and audit log.
+- **What makes it different:** findings come only from accountable TPO-head decisions, are revoked when a case is reopened, stay inside one college, and never certify an offer as "safe".
 
 ## Prerequisites
 

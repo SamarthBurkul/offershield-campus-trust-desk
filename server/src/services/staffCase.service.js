@@ -15,6 +15,21 @@ const { allowedFrom } = require('./caseStateMachine');
 const { normalizeDomain, normalizeEmail, normalizePhone, normalizeUpi, normalizeUrl } = require('./indicators/normalize');
 const { toStaffCaseListItem, toStaffCaseView } = require('../utils/caseViews');
 const audit = require('./audit.service');
+const notifications = require('./notifications/notify');
+
+const caseContext = (doc) => ({ caseNumber: doc.caseNumber, claimedCompany: doc.claimedCompany });
+
+/** Notify the student who owns the case (never the acting staff member). */
+function notifyStudent(user, found, type, context = {}) {
+  return notifications.notifySafely(user.collegeId, [String(found.studentId)], {
+    type,
+    context: { ...caseContext(found), ...context },
+    link: `/student/requests/${found._id}`,
+    refType: 'case',
+    refId: found._id,
+    excludeUserId: user.id,
+  });
+}
 
 const caseNotFound = () => new AppError(404, 'NOT_FOUND', 'Case not found');
 const caseClosed = () => new AppError(409, 'CASE_CLOSED', 'This case is closed');
@@ -251,6 +266,16 @@ async function assignCase(user, caseId, assigneeId, { ip }) {
     });
   }
   await recordAudit(user, found._id, 'case.assign', { from: currentAssignee, to: assigneeId, statusChanged: startedReview }, ip);
+  if (assigneeId && assigneeId !== currentAssignee) {
+    await notifications.notifySafely(user.collegeId, [assigneeId], {
+      type: 'case_assigned',
+      context: caseContext(found),
+      link: `/staff/cases/${found._id}`,
+      refType: 'case',
+      refId: found._id,
+      excludeUserId: user.id,
+    });
+  }
 }
 
 async function changeStatus(user, caseId, { status }, { ip }) {
@@ -270,6 +295,7 @@ async function requestInfo(user, caseId, { message }, { ip }) {
   const before = await transition(user, found._id, 'info_request', 'awaiting_student', { closedError: caseClosed });
   await addEvent(user, found._id, { type: 'info_requested', body: message, visibleToStudent: true, metadata: { from: before.status } });
   await recordAudit(user, found._id, 'case.info_request', { from: before.status }, ip);
+  await notifyStudent(user, found, 'case_info_requested');
 }
 
 async function sendStaffMessage(user, caseId, { body }, { ip }) {
@@ -280,6 +306,7 @@ async function sendStaffMessage(user, caseId, { body }, { ip }) {
   if (result.matchedCount === 0) await conflictOr404(user, found._id, { closedError: caseClosed });
   await addEvent(user, found._id, { type: 'staff_message', body, visibleToStudent: true });
   await recordAudit(user, found._id, 'case.staff_message', { length: body.length }, ip);
+  await notifyStudent(user, found, 'case_staff_message');
 }
 
 async function recommend(user, caseId, { type, basis }, { ip }) {
@@ -295,6 +322,14 @@ async function recommend(user, caseId, { type, basis }, { ip }) {
   // Staff-only: the student never learns about recommendations.
   await addEvent(user, found._id, { type: 'recommendation_made', visibleToStudent: false, metadata: { type } });
   await recordAudit(user, found._id, 'case.recommend', { type }, ip);
+  await notifications.notifySafely(user.collegeId, await notifications.activeStaffIds(user.collegeId, ['tpo_head']), {
+    type: 'case_recommendation',
+    context: caseContext(found),
+    link: `/staff/cases/${found._id}`,
+    refType: 'case',
+    refId: found._id,
+    excludeUserId: user.id,
+  });
 }
 
 module.exports = {
@@ -312,6 +347,7 @@ module.exports = {
   transition,
   addEvent,
   recordAudit,
+  notifyStudent,
   usersById,
   caseNotFound,
   invalidTransition,

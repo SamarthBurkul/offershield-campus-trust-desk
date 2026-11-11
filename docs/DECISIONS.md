@@ -215,3 +215,33 @@
 - **Context:** The decision form must link to the verified recruiter that blocks a fraud confirmation.
 - **Decision:** `AppError` may carry a safe `details` object, returned as `error.details`; currently only for `CONFLICTS_WITH_VERIFIED_RECRUITER`.
 - **Consequence:** Backwards-compatible (`code` and `message` unchanged); details must never contain secrets or another college's data.
+
+## ADR-037: Polling instead of WebSockets for notifications
+
+- **Context:** Notifications are low-volume and not time-critical; the deployment is one small Render service (ADR-015).
+- **Decision:** In-app notifications only; the client polls `GET /notifications/unread-count` every 30 s, pauses while the tab is hidden and refetches on focus. No WebSockets, Socket.io, push or email in the MVP.
+- **Consequence:** Up to 30 s delay; trivial server load at campus scale; no long-lived connections or extra auth surface. Email or push can be added later behind the same `notify` service.
+
+## ADR-038: Published advisories are immutable
+
+- **Context:** Students may act on an advisory; silently editing it would make it impossible to know what they were told.
+- **Decision:** Only drafts can be edited. A published advisory can only be withdrawn (with a staff-only reason); corrections are published as a new advisory. Notified students opening a withdrawn advisory see "This advisory was withdrawn".
+- **Consequence:** A clear, auditable history; corrections create a second notification.
+
+## ADR-039: Only the TPO head publishes advisories
+
+- **Context:** An advisory reaches many students at once and names confirmed indicators.
+- **Decision:** Officers and heads draft; only the head publishes and withdraws (same accountability model as decisions, ADR-024). Publishing re-checks that every linked indicator is still active.
+- **Consequence:** A single reviewer per college; drafts may wait for the head.
+
+## ADR-040: Tenant aggregation stage restrictions
+
+- **Context:** Aggregation pipelines can read other collections (`$lookup`, `$graphLookup`, `$unionWith`), write them (`$out`, `$merge`) or hide sub-pipelines (`$facet`), any of which could cross tenants.
+- **Decision:** `tenantRepository.aggregate` prepends `{ $match: { collegeId } }` and throws on those stages (and on stages with several operators). Cross-collection data is loaded by a second scoped query.
+- **Consequence:** Statistics need a few extra queries, but every aggregate is provably single-tenant.
+
+## ADR-041: 180-day notification TTL
+
+- **Context:** Notifications are transient pointers to cases and advisories, which keep the durable record (events, audit log).
+- **Decision:** A MongoDB TTL index deletes notifications 180 days after creation.
+- **Consequence:** The inbox stays small; nothing of record is lost. Older items simply disappear from the bell.

@@ -18,6 +18,10 @@ const { allowedFrom } = require('./caseStateMachine');
 const { simhash64 } = require('./linking/simhash');
 const { detectLinks } = require('./linking/link.service');
 const { refreshCaseSignals } = require('./signals/loader');
+const notifications = require('./notifications/notify');
+
+/** Context for notification templates: only these student-visible case fields. */
+const caseContext = (doc) => ({ caseNumber: doc.caseNumber, claimedCompany: doc.claimedCompany });
 
 /** Staff-only derived data after student activity: related-case links, then warning signals. */
 async function refreshDerivedData(collegeId, caseId, { simhashMaxDistance }) {
@@ -104,6 +108,14 @@ async function createCase(student, input, { ip, simhashMaxDistance }) {
   });
 
   await refreshDerivedData(collegeId, created._id, { simhashMaxDistance });
+  await notifications.notifySafely(collegeId, await notifications.activeStaffIds(collegeId), {
+    type: 'case_submitted',
+    context: caseContext(created),
+    link: `/staff/cases/${created._id}`,
+    refType: 'case',
+    refId: created._id,
+    excludeUserId: student.id,
+  });
   return toStudentCaseView(created);
 }
 
@@ -184,6 +196,18 @@ async function addStudentMessage(student, caseId, { body }, { ip, simhashMaxDist
   });
 
   await refreshDerivedData(collegeId, found._id, { simhashMaxDistance });
+
+  // The assignee hears about the reply; with no (active) assignee, all active staff do.
+  const staff = await notifications.activeStaffIds(collegeId);
+  const assignee = found.assigneeId ? String(found.assigneeId) : null;
+  await notifications.notifySafely(collegeId, assignee && staff.includes(assignee) ? [assignee] : staff, {
+    type: 'case_student_reply',
+    context: caseContext(found),
+    link: `/staff/cases/${found._id}`,
+    refType: 'case',
+    refId: found._id,
+    excludeUserId: student.id,
+  });
 
   return getCaseForStudent(student, found._id);
 }

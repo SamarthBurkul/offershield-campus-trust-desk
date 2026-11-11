@@ -4,8 +4,11 @@ import { createCollege, listColleges } from '../api/admin.js'
 import { errorMessage } from '../api/errors.js'
 import { Button, Card, ErrorAlert, OneTimeSecret, StatusBadge, TextField } from '../components/ui.jsx'
 import { splitList } from '../utils/lists.js'
+import usePageTitle from '../hooks/usePageTitle.js'
+import Skeleton from '../components/Skeleton.jsx'
 
 export default function AdminCollegesPage() {
+  usePageTitle('Colleges')
   const [colleges, setColleges] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -30,7 +33,7 @@ export default function AdminCollegesPage() {
       <CreateCollegeCard onCreated={() => setReloadKey((key) => key + 1)} />
       <Card title="All colleges">
         <ErrorAlert message={loadError} />
-        {colleges === null && !loadError && <p className="text-slate-600">Loading…</p>}
+        {colleges === null && !loadError && <Skeleton rows={3} label="Loading colleges" />}
         {colleges?.length === 0 && <p className="text-slate-600">No colleges yet.</p>}
         {colleges?.length > 0 && (
           <ul className="divide-y divide-slate-100">

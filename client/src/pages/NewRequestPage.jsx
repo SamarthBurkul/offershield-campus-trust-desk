@@ -6,6 +6,7 @@ import EvidencePicker from '../components/EvidencePicker.jsx'
 import ListInput from '../components/ListInput.jsx'
 import { Button, Card, CheckboxField, ErrorAlert, SelectField, TextAreaField, TextField } from '../components/ui.jsx'
 import { CHANNEL_LABELS, MONEY_PURPOSE_LABELS } from '../constants/caseStatus.js'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -63,6 +64,7 @@ function initialForm(params) {
 }
 
 export default function NewRequestPage() {
+  usePageTitle('New request')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [form, setForm] = useState(() => initialForm(searchParams))

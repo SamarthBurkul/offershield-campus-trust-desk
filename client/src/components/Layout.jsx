@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { ROLE_LABELS, ROLES, STAFF_ROLES, homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
+import NotificationBell from './NotificationBell.jsx'
 
 const navClass = ({ isActive }) =>
   `text-sm font-medium ${isActive ? 'text-blue-900' : 'text-slate-600 hover:text-blue-800'}`
@@ -13,6 +14,8 @@ function navLinksFor(user) {
       { to: '/staff', label: 'Home', end: true },
       { to: '/staff/cases', label: 'Case desk' },
       { to: '/staff/registry', label: 'Registry' },
+      { to: '/staff/advisories', label: 'Advisories' },
+      { to: '/staff/stats', label: 'Stats' },
       { to: '/staff/members', label: 'Staff' },
       ...(user.role === ROLES.TPO_HEAD ? [{ to: '/staff/audit', label: 'Audit log' }] : []),
     ]
@@ -20,6 +23,7 @@ function navLinksFor(user) {
   return [
     { to: homePathForRole(user.role), label: 'Home', end: true },
     { to: '/student/requests', label: 'My requests' },
+    { to: '/advisories', label: 'Advisories' },
   ]
 }
 
@@ -40,7 +44,7 @@ export default function Layout() {
             <Link to="/" className="text-lg font-semibold text-blue-900">
               OfferShield — Campus Trust Desk
             </Link>
-            <nav className="flex gap-4" aria-label="Main">
+            <nav className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Main">
               {navLinksFor(user).map((link) => (
                 <NavLink key={link.to} to={link.to} end={link.end} className={navClass}>
                   {link.label}
@@ -49,7 +53,8 @@ export default function Layout() {
             </nav>
           </div>
           {user ? (
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              {user.collegeId && !user.mustChangePassword && <NotificationBell />}
               <span className="text-slate-700">
                 <span className="font-medium text-slate-900">{user.name}</span> · {ROLE_LABELS[user.role]}
               </span>
@@ -80,8 +85,7 @@ export default function Layout() {
 
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-4xl px-4 py-4 text-sm text-slate-500">
-          OfferShield helps placement teams verify recruitment offers. Automated checks assist staff; they
-          never decide whether an offer is genuine.
+          OfferShield helps your placement cell review opportunities. It never certifies an offer as safe.
         </div>
       </footer>
     </div>

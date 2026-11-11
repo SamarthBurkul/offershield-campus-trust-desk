@@ -4,8 +4,10 @@ import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import { Button, Card, ErrorAlert, TextField } from '../components/ui.jsx'
+import usePageTitle from '../hooks/usePageTitle.js'
 
 export default function LoginPage() {
+  usePageTitle('Sign in')
   const { user, loading, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
