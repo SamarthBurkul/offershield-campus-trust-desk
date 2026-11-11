@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.js'
+import LookupBox from '../components/LookupBox.jsx'
 import { Card } from '../components/ui.jsx'
 
 const STEPS = [
@@ -30,6 +31,8 @@ export default function StudentHomePage() {
         <h1 className="text-2xl font-bold text-slate-900">Welcome, {user.name}</h1>
         {college && <p className="text-slate-600">{college.name}</p>}
       </section>
+
+      <LookupBox />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <ActionCard to="/student/requests/new" title="Ask your placement cell to verify an offer">

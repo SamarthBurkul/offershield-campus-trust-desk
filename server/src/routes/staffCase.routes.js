@@ -5,6 +5,8 @@ const { createStaffCaseController } = require('../controllers/staffCase.controll
 const { requireRole } = require('../middleware/requireRole');
 const { validateBody, validateQuery } = require('../middleware/validate');
 const schemas = require('../validators/staffCase.schemas');
+const { linkCaseSchema } = require('../validators/registry.schemas');
+const { emptyBodySchema } = require('../validators/admin.schemas');
 
 /**
  * Mounted at /staff/cases inside the staff router, which already applies
@@ -26,6 +28,9 @@ function createStaffCaseRouter({ config }) {
   router.post('/:id/messages', validateBody(schemas.staffMessageSchema), controller.sendMessage);
   router.post('/:id/notes', validateBody(schemas.noteSchema), controller.addNote);
   router.post('/:id/recommendation', validateBody(schemas.recommendationSchema), controller.recommend);
+  router.post('/:id/links', validateBody(linkCaseSchema), controller.link);
+  router.delete('/:id/links/:otherId', controller.unlink);
+  router.post('/:id/signals/recompute', validateBody(emptyBodySchema), controller.recomputeSignals);
   // Final decisions and reopening are TPO-head only (ADR-024).
   router.post('/:id/decision', headOnly, validateBody(schemas.decisionSchema), controller.decide);
   router.post('/:id/reopen', headOnly, validateBody(schemas.reopenSchema), controller.reopen);

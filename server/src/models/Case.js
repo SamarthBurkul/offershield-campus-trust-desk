@@ -11,6 +11,8 @@ const {
   DECISION_TYPES,
   DECISION_CHECKS,
   DISMISS_REASONS,
+  SIGNAL_SEVERITIES,
+  RELATED_REASONS,
 } = require('../constants/caseStatus');
 
 const { ObjectId } = mongoose.Schema.Types;
@@ -34,6 +36,11 @@ const indicatorSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const indicatorRefSchema = new mongoose.Schema(
+  { type: { type: String, enum: INDICATOR_TYPES, required: true }, value: { type: String, required: true } },
+  { _id: false },
+);
+
 const recommendationSchema = new mongoose.Schema(
   {
     type: { type: String, enum: DECISION_TYPES, required: true },
@@ -49,10 +56,7 @@ const decisionFields = {
   basis: { type: String, required: true, maxlength: 3000 },
   checks: { type: [{ type: String, enum: DECISION_CHECKS }], default: [] },
   studentMessage: { type: String, maxlength: 1000, default: null },
-  confirmedIndicators: {
-    type: [new mongoose.Schema({ type: { type: String, enum: INDICATOR_TYPES, required: true }, value: { type: String, required: true } }, { _id: false })],
-    default: [],
-  },
+  confirmedIndicators: { type: [indicatorRefSchema], default: [] },
   verifiedDomains: { type: [String], default: [] },
   dismissReason: { type: String, enum: [...DISMISS_REASONS, null], default: null },
   duplicateOfCaseId: { type: ObjectId, ref: 'Case', default: null },
@@ -70,6 +74,30 @@ const decisionHistorySchema = new mongoose.Schema(
     reopenReason: { type: String, required: true, maxlength: 1000 },
   },
   { _id: false },
+);
+
+// A link to another case of the same college; mirrored on both cases and kept in sync with linkedCaseIds.
+const relatedSchema = new mongoose.Schema(
+  {
+    caseId: { type: ObjectId, ref: 'Case', required: true },
+    reasons: { type: [{ type: String, enum: RELATED_REASONS }], default: [] },
+    sharedIndicators: { type: [indicatorRefSchema], default: [] },
+    similarity: { type: Number, min: 0, max: 1, default: null },
+    linkedBy: { type: ObjectId, ref: 'User', default: null },
+    detectedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
+// Staff-only triage hints. They never change status or priority and are never shown to students.
+const signalSchema = new mongoose.Schema(
+  {
+    code: { type: String, required: true },
+    severity: { type: String, enum: SIGNAL_SEVERITIES, required: true },
+    message: { type: String, required: true },
+    detail: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+  },
+  { _id: false, minimize: false },
 );
 
 const caseSchema = new mongoose.Schema(
@@ -114,9 +142,13 @@ const caseSchema = new mongoose.Schema(
     priority: { type: String, enum: PRIORITIES, default: 'normal' },
     assigneeId: { type: ObjectId, ref: 'User', default: null },
     indicators: { type: [indicatorSchema], default: [] },
-    // Filled in Phase 5 (warning signals and related-case linking).
-    signals: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // Phase 5: warning signals and related-case linking (staff-only).
+    signals: { type: [signalSchema], default: [] },
+    signalsComputedAt: { type: Date, default: null },
     linkedCaseIds: { type: [ObjectId], default: [] },
+    related: { type: [relatedSchema], default: [] },
+    // 64-bit SimHash of the normalised messageText, 16 hex characters.
+    textHash: { type: String, match: /^[0-9a-f]{16}$/, default: null },
     // Officer (or head) recommendation; staff-only.
     recommendation: { type: recommendationSchema, default: null },
     // Final TPO-head decision. Phase 5 reads confirmedIndicators/verifiedDomains to build the registry.
@@ -132,6 +164,7 @@ caseSchema.index({ collegeId: 1, caseNumber: 1 }, { unique: true });
 caseSchema.index({ collegeId: 1, status: 1, createdAt: -1 });
 caseSchema.index({ collegeId: 1, studentId: 1, createdAt: -1 });
 caseSchema.index({ collegeId: 1, 'indicators.type': 1, 'indicators.value': 1 });
+caseSchema.index({ collegeId: 1, createdAt: -1, textHash: 1 });
 
 const Case = mongoose.models.Case || mongoose.model('Case', caseSchema);
 

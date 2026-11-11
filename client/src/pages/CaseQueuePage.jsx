@@ -6,6 +6,7 @@ import CaseFilters from '../components/CaseFilters.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Button, Card, ErrorAlert } from '../components/ui.jsx'
 import { CHANNEL_LABELS } from '../constants/caseStatus.js'
+import { SIGNAL_LABELS } from '../constants/verificationMethods.js'
 import { relativeTime } from '../utils/time.js'
 
 const FILTER_KEYS = ['status', 'priority', 'assignee', 'channel', 'q', 'page']
@@ -87,6 +88,18 @@ export default function CaseQueuePage() {
                       <Link to={`/staff/cases/${item.id}`} className="font-mono font-medium text-blue-700 hover:underline">
                         {item.caseNumber}
                       </Link>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {item.topSignal && (
+                          <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-800 ring-1 ring-red-200" title="Top warning signal (automated hint)">
+                            {SIGNAL_LABELS[item.topSignal] ?? item.topSignal}
+                          </span>
+                        )}
+                        {item.relatedCount > 0 && (
+                          <span className="rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-800 ring-1 ring-violet-200" title="Related cases">
+                            {item.relatedCount} related
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 pr-3">
                       <div className="text-slate-900">{item.claimedCompany}</div>

@@ -5,14 +5,44 @@
 | 1 | Foundation: monorepo, Express API with health endpoint, security baseline, validated config, React client shell, tests, docs | **Passed (architect-reviewed 2026-11-10)** |
 | 2 | MongoDB, authentication, four roles, college tenancy and isolation, staff management, append-only audit log, seed scripts | **Passed (architect-reviewed 2026-11-10)** |
 | 3 | Student verification requests, evidence (GridFS), indicator extraction | **Passed (architect-reviewed 2026-11-10)** |
-| 4 | TPO investigation desk, decisions, audit trail | **Implemented — awaiting architect review** |
-| 5 | Registry, lookup, linking, warning signals | Not started |
+| 4 | TPO investigation desk, decisions, audit trail | **Passed (architect-reviewed 2026-11-10)** |
+| 5 | Registry, lookup, look-alike detection, related-case linking, warning signals | **Implemented — awaiting architect review** |
 | 6 | Advisories, notifications, stats | Not started |
 | 7 | Security test suite, deployment (one Render web service), docs | Not started |
 
-## Phase 4 — details
+## Phase 5 — details
 
 **Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- `FraudIndicator` (published only by confirmed_fraud decisions, revoked on reopen or by the head), `Recruiter` (pending/verified/suspended, evidence-backed verification with expiry and history), `LookupEvent` (no query text); Case `related`, `signals`, `textHash`; `linked` event type.
+- Conflict rules between verified recruiters and fraud indicators; Phase 4's pending item (revoke on reopen) done.
+- Look-alike detection (tldts, punycode, homoglyph skeleton, edit distance, brand tokens) and 64-bit SimHash linking.
+- `GET /lookup` with precedence, staff-only source links, rate limit; recruiter and indicator registry APIs; manual links; signal recompute.
+- Nine staff-only warning signals; queue `relatedCount` and `topSignal`.
+- Client: Check-before-you-pay LookupBox + LookupResultCard (students and staff), RegistryPage, SignalsPanel, RelatedCasesPanel, RecruiterForm (incl. pre-fill from a verified_genuine decision), conflict link in the decision form, queue badges, request-form pre-fill.
+
+### Tests executed (2026-11-10, Node v22.13.1, MongoDB 8.2.6 in memory)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm run test:server` | Test Suites: 26 passed, 26 total; Tests: 313 passed, 313 total | 0 |
+| `npm run test:client` | Test Files 6 passed (6); Tests 37 passed (37) | 0 |
+| `npm test` | 313 server + 37 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | `client/dist` produced | 0 |
+| SimHash distances | identical 0; template (name/amount/contacts changed) 0; one word reworded 5; unrelated 25–30 | — |
+| Browser smoke (headless Chrome through the UI, demo accounts on Atlas) | see final report | — |
+
+### Limitations
+
+- Heuristic look-alike detection; no DNS/RDAP; sister domains must be added to the recruiter.
+- Signals and links are recomputed synchronously (open cases capped at 500 per recompute).
+
+## Phase 4 — details
+
+**Status:** Passed (architect-reviewed 2026-11-10).
 
 ### Implemented
 
@@ -114,4 +144,4 @@
 - React 19 + Vite 8 + Tailwind v4 client shell with HealthStatus and a single axios instance.
 - Tests at sign-off: server 18/18, client 5/5; build and lint exit 0.
 
-**Next authorised phase:** none until architect approval of Phase 4.
+**Next authorised phase:** none until architect approval of Phase 5.

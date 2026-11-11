@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { getCaseCounts } from '../api/staffCases.js'
 import { ROLE_LABELS, ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
+import LookupBox from '../components/LookupBox.jsx'
 import { Card } from '../components/ui.jsx'
 
 const COUNT_CARDS = [
@@ -49,6 +50,8 @@ export default function StaffHomePage() {
         ))}
       </div>
 
+      <LookupBox staff />
+
       <Card title="Staff desk">
         <ul className="space-y-2">
           <li>
@@ -56,6 +59,12 @@ export default function StaffHomePage() {
               Case desk
             </Link>
             <span className="text-sm text-slate-600"> — triage, investigate and {isHead ? 'decide' : 'recommend on'} student requests</span>
+          </li>
+          <li>
+            <Link to="/staff/registry" className="font-medium text-blue-700 hover:underline">
+              College registry
+            </Link>
+            <span className="text-sm text-slate-600"> — verified recruiters and confirmed fraud indicators</span>
           </li>
           {isHead && (
             <li>

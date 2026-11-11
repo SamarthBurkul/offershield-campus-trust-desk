@@ -15,6 +15,15 @@ const {
 } = require('../utils/caseViews');
 const audit = require('./audit.service');
 const { allowedFrom } = require('./caseStateMachine');
+const { simhash64 } = require('./linking/simhash');
+const { detectLinks } = require('./linking/link.service');
+const { refreshCaseSignals } = require('./signals/loader');
+
+/** Staff-only derived data after student activity: related-case links, then warning signals. */
+async function refreshDerivedData(collegeId, caseId, { simhashMaxDistance }) {
+  await detectLinks(collegeId, caseId, { maxDistance: simhashMaxDistance });
+  await refreshCaseSignals(collegeId, caseId);
+}
 
 const caseNotFound = () => new AppError(404, 'NOT_FOUND', 'Request not found');
 const caseClosed = () => new AppError(409, 'CASE_CLOSED', 'This request is closed and cannot be changed');
@@ -39,7 +48,7 @@ async function findOwnedCaseById(student, caseId) {
   return found;
 }
 
-async function createCase(student, input, { ip }) {
+async function createCase(student, input, { ip, simhashMaxDistance }) {
   assertNoSensitiveIds([input.messageText, input.studentNote, input.claimedCompany, input.roleTitle, Object.values(input.contacts)]);
 
   const collegeId = student.collegeId;
@@ -64,6 +73,7 @@ async function createCase(student, input, { ip }) {
     status: 'submitted',
     priority: input.moneyRequested.requested || input.paidAlready ? 'high' : 'normal',
     indicators: extractIndicators(input),
+    textHash: simhash64(input.messageText),
     lastActivityAt: now,
   });
 
@@ -93,6 +103,7 @@ async function createCase(student, input, { ip }) {
     ip,
   });
 
+  await refreshDerivedData(collegeId, created._id, { simhashMaxDistance });
   return toStudentCaseView(created);
 }
 
@@ -121,7 +132,7 @@ async function getCaseForStudent(student, caseId) {
   };
 }
 
-async function addStudentMessage(student, caseId, { body }, { ip }) {
+async function addStudentMessage(student, caseId, { body }, { ip, simhashMaxDistance }) {
   const found = await findOwnedCaseById(student, caseId);
   if (isClosedStatus(found.status)) throw caseClosed();
   assertNoSensitiveIds([body]);
@@ -171,6 +182,8 @@ async function addStudentMessage(student, caseId, { body }, { ip }) {
     metadata: { statusChanged: reopensReview },
     ip,
   });
+
+  await refreshDerivedData(collegeId, found._id, { simhashMaxDistance });
 
   return getCaseForStudent(student, found._id);
 }

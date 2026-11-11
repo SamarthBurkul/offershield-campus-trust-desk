@@ -5,6 +5,7 @@ const AppError = require('../utils/AppError');
 const { caseRepository } = require('../repositories');
 const { normalizeDomain, normalizeEmail, normalizePhone, normalizeUpi, normalizeUrl } = require('./indicators/normalize');
 const { findCaseOr404, transition, addEvent, recordAudit } = require('./staffCase.service');
+const indicatorRegistry = require('./registry/indicator.service');
 
 const NORMALIZERS = {
   email: (value) => normalizeEmail(value)?.email,
@@ -60,8 +61,9 @@ async function resolveDuplicate(user, found, duplicateOfCaseId) {
  * Record the final decision (TPO head only). One atomic conditional update moves the case from any
  * open status to the decision's final status; concurrent decisions therefore cannot both succeed.
  *
- * Registry entries are NOT created here. Phase 5 builds the college registry from
- * decision.confirmedIndicators and decision.verifiedDomains.
+ * A confirmed_fraud decision publishes its confirmedIndicators to the college fraud registry, but
+ * only AFTER the atomic update succeeds; the conflict check against verified recruiters runs BEFORE it.
+ * (Verified domains are added to the recruiter registry explicitly by the TPO head, not automatically.)
  */
 async function recordDecision(user, caseId, input, { ip }) {
   const found = await findCaseOr404(user, caseId);
@@ -78,6 +80,10 @@ async function recordDecision(user, caseId, input, { ip }) {
     decidedBy: user.id,
     decidedAt: now,
   };
+
+  if (input.type === 'confirmed_fraud') {
+    await indicatorRegistry.assertNoVerifiedRecruiterConflict(user.collegeId, decision.confirmedIndicators);
+  }
 
   const before = await transition(user, found._id, 'decision', input.type, { set: { decision } });
 
@@ -107,11 +113,16 @@ async function recordDecision(user, caseId, input, { ip }) {
     },
     ip,
   );
+
+  if (input.type === 'confirmed_fraud') {
+    await indicatorRegistry.publishFromDecision(user, found._id, decision.confirmedIndicators, { ip });
+  }
 }
 
 /**
- * Reopen a closed case (TPO head only): the current decision moves to decisionHistory with the reason.
- * Phase 5 must also revoke any registry entries created from the reopened decision.
+ * Reopen a closed case (TPO head only): the current decision moves to decisionHistory with the reason,
+ * and fraud indicators published by a confirmed_fraud decision lose this case as a source (revoked
+ * when no source case remains).
  */
 async function reopenCase(user, caseId, { reason }, { ip }) {
   const found = await findCaseOr404(user, caseId);
@@ -133,6 +144,10 @@ async function reopenCase(user, caseId, { reason }, { ip }) {
     metadata: { reason, previousStatus: before.status },
   });
   await recordAudit(user, found._id, 'case.reopen', { previousStatus: before.status, previousDecisionType: previous?.type ?? null }, ip);
+
+  if (previous?.type === 'confirmed_fraud' && previous.confirmedIndicators?.length) {
+    await indicatorRegistry.revokeForReopenedCase(user, found._id, previous.confirmedIndicators, { ip });
+  }
 }
 
 module.exports = { recordDecision, reopenCase };

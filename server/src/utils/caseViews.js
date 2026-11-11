@@ -2,6 +2,7 @@
 
 const { idOf } = require('./safeUser');
 const { OPEN_STATUSES } = require('../constants/caseStatus');
+const { topSignal } = require('../services/signals/compute');
 
 const iso = (date) => (date ? new Date(date).toISOString() : null);
 
@@ -135,6 +136,8 @@ function toStaffCaseListItem(doc, { usersById, evidenceCount, staleDays }) {
     lastActivityAt: iso(doc.lastActivityAt),
     createdAt: iso(doc.createdAt),
     isStale: isStale(doc, staleDays),
+    relatedCount: (doc.linkedCaseIds ?? []).length,
+    topSignal: topSignal(doc.signals),
   };
 }
 
@@ -168,8 +171,26 @@ function toStaffEvidenceView(evidence) {
   };
 }
 
-/** Full staff view of a case, including internal events, notes, recommendation and decisions. */
-function toStaffCaseView(doc, { usersById, events, notes, evidence, staleDays }) {
+function toSignalView(signal) {
+  return { code: signal.code, severity: signal.severity, message: signal.message, detail: signal.detail ?? {} };
+}
+
+function toRelatedView(entry, relatedById) {
+  const other = relatedById.get(String(entry.caseId));
+  return {
+    caseId: String(entry.caseId),
+    caseNumber: other?.caseNumber ?? null,
+    status: other?.status ?? null,
+    claimedCompany: other?.claimedCompany ?? null,
+    reasons: [...(entry.reasons ?? [])],
+    sharedIndicators: (entry.sharedIndicators ?? []).map(({ type, value }) => ({ type, value })),
+    similarity: entry.similarity ?? null,
+    detectedAt: iso(entry.detectedAt),
+  };
+}
+
+/** Full staff view of a case, including internal events, notes, recommendation, decisions, signals and links. */
+function toStaffCaseView(doc, { usersById, events, notes, evidence, staleDays, relatedById = new Map() }) {
   const student = usersById.get(String(doc.studentId));
   return {
     ...baseCaseFields(doc),
@@ -189,8 +210,10 @@ function toStaffCaseView(doc, { usersById, events, notes, evidence, staleDays })
       reopenedAt: iso(entry.reopenedAt),
       reopenReason: entry.reopenReason,
     })),
-    signals: [...(doc.signals ?? [])],
+    signals: (doc.signals ?? []).map(toSignalView),
+    signalsComputedAt: iso(doc.signalsComputedAt),
     linkedCaseIds: (doc.linkedCaseIds ?? []).map(String),
+    related: (doc.related ?? []).map((entry) => toRelatedView(entry, relatedById)),
     events: events.map((event) => toStaffEventView(event, usersById)),
     notes: notes.map((note) => toNoteView(note, usersById)),
     evidence: evidence.map(toStaffEvidenceView),

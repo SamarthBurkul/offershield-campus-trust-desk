@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { createCase, uploadEvidence } from '../api/cases.js'
 import { errorMessage } from '../api/errors.js'
 import EvidencePicker from '../components/EvidencePicker.jsx'
@@ -49,9 +49,23 @@ function toRequestBody(form) {
   }
 }
 
+/** Pre-fill from "Ask your placement cell to verify" links (?company=&email=&phone=&upi=&link=). */
+function initialForm(params) {
+  const value = (name) => (params.get(name) ?? '').slice(0, 500)
+  return {
+    ...EMPTY,
+    claimedCompany: value('company').slice(0, 120),
+    emails: value('email') ? [value('email')] : [],
+    phones: value('phone') ? [value('phone')] : [],
+    upiIds: value('upi') ? [value('upi')] : [],
+    links: value('link') ? [value('link')] : [],
+  }
+}
+
 export default function NewRequestPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState(EMPTY)
+  const [searchParams] = useSearchParams()
+  const [form, setForm] = useState(() => initialForm(searchParams))
   const [files, setFiles] = useState([])
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)

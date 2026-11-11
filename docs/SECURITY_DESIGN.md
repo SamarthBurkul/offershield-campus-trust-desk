@@ -178,6 +178,33 @@ Only `tpo_head` may record decisions (all four types) and reopen cases (route-le
 
 `GET /staff/audit` is TPO-head only and tenant-scoped; entries remain append-only.
 
+## Implemented in Phase 5
+
+### Allegation vs finding
+
+Student-reported values stay case indicators (allegations). A **confirmed fraud indicator** exists only when a TPO head records a confirmed_fraud decision selecting it from the case's own indicators. Only `decision.service` (via `indicator.service`) and the head's manual revoke write `FraudIndicator`; there is no create route. Reopening the source case removes it as a source and revokes the indicator when no confirmed source remains, so a withdrawn finding stops warning students immediately.
+
+### Conflict rules
+
+- A confirmed indicator whose domain, email domain or URL host belongs to a **verified** recruiter of the college is rejected (409 `CONFLICTS_WITH_VERIFIED_RECRUITER`) **before** the decision's atomic update: nothing changes, nothing is audited. The head must suspend the recruiter first.
+- A recruiter domain, contact email or phone that is an **active** fraud indicator is rejected (409 `CONFLICTS_WITH_FRAUD_INDICATOR`) on create, update, approve and renew.
+- Recruiter domains and contacts can never be free-mail (ADR-033); officer-created recruiters need head approval (ADR-034).
+
+### Lookup data minimisation
+
+- College-scoped; students, officers and heads only (super admin 403); per-user rate limit.
+- Responses contain only registry facts: indicator type/value/confirmation date and verified recruiter name/domains/methods/dates. Never case data, student data, `sourceCaseIds` (staff get case links only), evidence notes, verifier names, or pending/suspended recruiters.
+- `LookupEvent` stores who/role/query type/result for metrics; **never the query text**.
+- Guidance never says "safe" or "genuine"; "not reviewed" explicitly "does not mean safe".
+
+### No network calls
+
+Look-alike detection (tldts + punycode + homoglyph skeleton + edit distance), SimHash and signals are pure string computations. The server performs no HTTP, DNS, RDAP or WHOIS request for any submitted value (ADR-032).
+
+### Staff-only derived data
+
+Signals, related cases, `textHash`, `linked` events and source-case links are serialized only by staff views. Signals never change status or priority and never block a request. Linking never crosses colleges and ignores free-mail domains and verified recruiters' domains, so legitimate shared contacts do not link unrelated students.
+
 ## Known limitations
 
 - **No email OTP verification in the MVP.** Student registration is controlled by the college email domain plus the college's join code (the pilot control, ADR-012). Someone who knows the join code could register with an address on the college's domain that they do not own. Mitigations: rotate the join code, disable accounts, add email verification later.
@@ -187,8 +214,9 @@ Only `tpo_head` may record decisions (all four types) and reopen cases (route-le
 - PDFs are not sanitised (they may carry author metadata or active content); they are only downloaded as attachments under `CSP: sandbox` and opened in the user's own viewer.
 - Images are not decoded or re-encoded: metadata segments are removed, but pixel content (e.g. a visible ID card in a screenshot) is not inspected. Students are asked to crop IDs out.
 - No malware scanning of uploads in the MVP.
+- Look-alike detection is heuristic (ADR-030): it can miss novel tricks and can flag legitimate sister domains until they are added to the recruiter.
+- Recruiter verification relies on the staff member's evidence note; there is no automated domain ownership check (no DNS/RDAP in the MVP).
 - Decisions are recorded by a single TPO head; there is no second-person approval (ADR-024).
-- Reopening a case does not yet revoke registry entries — there is no registry until Phase 5, which must revoke entries created from a reopened decision.
 - The privacy guard detects PAN and Aadhaar formats only; other identifiers (passport, voter ID, bank account numbers) are not detected.
 
 ## Rules for later phases (mandatory)

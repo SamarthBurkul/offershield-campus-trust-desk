@@ -178,10 +178,14 @@ async function getCounts(user, { staleDays }) {
 async function getCaseForStaff(user, caseId, { staleDays }) {
   const found = await findCaseOr404(user, caseId);
   const collegeId = user.collegeId;
-  const [events, notes, evidence] = await Promise.all([
+  const relatedIds = (found.related ?? []).map((entry) => entry.caseId);
+  const [events, notes, evidence, relatedCases] = await Promise.all([
     caseEventRepository.forTenant(collegeId).find({ caseId: found._id }, { sort: { createdAt: 1, _id: 1 }, lean: true }),
     noteRepository.forTenant(collegeId).find({ caseId: found._id }, { sort: { createdAt: 1, _id: 1 }, lean: true }),
     evidenceRepository.forTenant(collegeId).find({ caseId: found._id }, { sort: { createdAt: 1 }, lean: true }),
+    relatedIds.length
+      ? caseRepository.forTenant(collegeId).find({ _id: { $in: relatedIds } }, { select: 'caseNumber status claimedCompany', lean: true })
+      : [],
   ]);
   const people = await usersById(collegeId, [
     found.studentId,
@@ -192,7 +196,8 @@ async function getCaseForStaff(user, caseId, { staleDays }) {
     ...events.map((event) => event.actorId),
     ...notes.map((note) => note.authorId),
   ]);
-  return toStaffCaseView(found, { usersById: people, events, notes, evidence, staleDays });
+  const relatedById = new Map(relatedCases.map((item) => [String(item._id), item]));
+  return toStaffCaseView(found, { usersById: people, events, notes, evidence, staleDays, relatedById });
 }
 
 // ----------------------------------------------------------------------------------------------

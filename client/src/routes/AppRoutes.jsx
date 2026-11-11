@@ -13,6 +13,7 @@ import MyRequestsPage from '../pages/MyRequestsPage.jsx'
 import NewRequestPage from '../pages/NewRequestPage.jsx'
 import NotFoundPage from '../pages/NotFoundPage.jsx'
 import RegisterPage from '../pages/RegisterPage.jsx'
+import RegistryPage from '../pages/RegistryPage.jsx'
 import RequestDetailPage from '../pages/RequestDetailPage.jsx'
 import StaffCaseDetailPage from '../pages/StaffCaseDetailPage.jsx'
 import StaffHomePage from '../pages/StaffHomePage.jsx'
@@ -42,6 +43,7 @@ export default function AppRoutes() {
           <Route path="staff/members" element={<StaffMembersPage />} />
           <Route path="staff/cases" element={<CaseQueuePage />} />
           <Route path="staff/cases/:id" element={<StaffCaseDetailPage />} />
+          <Route path="staff/registry" element={<RegistryPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.TPO_HEAD]} />}>
           <Route path="staff/audit" element={<AuditLogPage />} />

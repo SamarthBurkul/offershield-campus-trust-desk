@@ -67,7 +67,11 @@ const CASE_EVENT_TYPES = Object.freeze([
   'decision_recorded',
   'reopened',
   'recommendation_made',
+  'linked',
 ]);
+
+const SIGNAL_SEVERITIES = Object.freeze(['info', 'warning', 'high']);
+const RELATED_REASONS = Object.freeze(['shared_indicator', 'similar_text', 'manual']);
 
 const INDICATOR_TYPES = Object.freeze(['email', 'domain', 'phone', 'upi', 'url']);
 const INDICATOR_SOURCES = Object.freeze(['student_entered', 'extracted']);
@@ -93,4 +97,6 @@ module.exports = {
   INDICATOR_TYPES,
   INDICATOR_SOURCES,
   EVIDENCE_LIMITS,
+  SIGNAL_SEVERITIES,
+  RELATED_REASONS,
 };

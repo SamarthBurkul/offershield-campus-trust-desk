@@ -8,7 +8,7 @@ const AppError = require('../utils/AppError');
  */
 function classify(err) {
   if (err instanceof AppError) {
-    return { status: err.statusCode, code: err.code, message: err.message };
+    return { status: err.statusCode, code: err.code, message: err.message, details: err.details };
   }
   if (err && err.type === 'entity.parse.failed') {
     return { status: 400, code: 'INVALID_JSON', message: 'Malformed JSON body' };
@@ -37,7 +37,7 @@ function classify(err) {
 function createErrorHandler({ nodeEnv }) {
   // Express identifies error handlers by their four-argument signature.
   return function errorHandler(err, req, res, _next) {
-    const { status, code, message } = classify(err);
+    const { status, code, message, details } = classify(err);
 
     // Log method, path and outcome only - never request bodies or headers.
     if (status >= 500) {
@@ -47,6 +47,8 @@ function createErrorHandler({ nodeEnv }) {
     }
 
     const body = { error: { code, message } };
+    // Optional safe, structured context set by a service (e.g. the conflicting recruiter's id).
+    if (details) body.error.details = details;
     // Stack traces are only ever exposed for unexpected errors in local development.
     if (status >= 500 && nodeEnv === 'development' && err && err.stack) {
       body.error.stack = err.stack;

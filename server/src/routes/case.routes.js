@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const caseController = require('../controllers/case.controller');
+const { createCaseController } = require('../controllers/case.controller');
 const { createEvidenceController } = require('../controllers/evidence.controller');
 const { createCaseRateLimiter } = require('../middleware/caseRateLimiter');
 const { enforcePasswordChange } = require('../middleware/enforcePasswordChange');
@@ -14,6 +14,7 @@ const { emptyBodySchema } = require('../validators/admin.schemas');
 
 function createCaseRouter({ config, authenticate }) {
   const router = Router();
+  const caseController = createCaseController(config);
   const evidence = createEvidenceController(config);
   const student = [requireRole('student'), requireTenant];
 

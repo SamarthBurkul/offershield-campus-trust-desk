@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { deskErrorMessage, errorMessage } from '../api/errors.js'
+import { createRecruiter } from '../api/registry.js'
 import * as staffCases from '../api/staffCases.js'
 import { ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
@@ -13,7 +14,10 @@ import EvidenceList from '../components/EvidenceList.jsx'
 import IndicatorList from '../components/IndicatorList.jsx'
 import NotesPanel from '../components/NotesPanel.jsx'
 import RecommendationForm, { CurrentRecommendation } from '../components/RecommendationForm.jsx'
+import RecruiterForm from '../components/RecruiterForm.jsx'
+import RelatedCasesPanel from '../components/RelatedCasesPanel.jsx'
 import ReopenDialog from '../components/ReopenDialog.jsx'
+import SignalsPanel from '../components/SignalsPanel.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { Button, Card, ErrorAlert } from '../components/ui.jsx'
 import { CHANNEL_LABELS, MONEY_PURPOSE_LABELS, PRIORITY_LABELS, isClosedStatus } from '../constants/caseStatus.js'
@@ -36,6 +40,8 @@ export default function StaffCaseDetailPage() {
   const [loadError, setLoadError] = useState('')
   const [banner, setBanner] = useState('')
   const [reopening, setReopening] = useState(false)
+  const [addingRecruiter, setAddingRecruiter] = useState(false)
+  const [notice, setNotice] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -59,9 +65,14 @@ export default function StaffCaseDetailPage() {
     try {
       setData(await action())
     } catch (err) {
-      const message = deskErrorMessage(err)
-      if (err?.response?.status === 409) setBanner(message)
-      throw new Error(message)
+      const code = err?.response?.data?.error?.code
+      // Business-rule conflicts carry their own message; generic 409s mean someone else changed the case.
+      const message = code === 'CONFLICTS_WITH_VERIFIED_RECRUITER' ? errorMessage(err) : deskErrorMessage(err)
+      if (err?.response?.status === 409 && code !== 'CONFLICTS_WITH_VERIFIED_RECRUITER') setBanner(message)
+      const error = new Error(message)
+      error.code = code
+      error.details = err?.response?.data?.error?.details
+      throw error
     }
   }, [])
 
@@ -190,8 +201,23 @@ export default function StaffCaseDetailPage() {
         </div>
 
         <div className="space-y-6">
+          {notice && <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{notice}</p>}
+          <SignalsPanel signals={data.signals} computedAt={data.signalsComputedAt} onRecompute={() => run(() => staffCases.recomputeSignals(data.id))} />
+          <RelatedCasesPanel
+            caseId={data.id}
+            related={data.related}
+            onLink={(otherId) => run(() => staffCases.linkCase(data.id, otherId))}
+            onUnlink={(otherId) => run(() => staffCases.unlinkCase(data.id, otherId))}
+          />
           {closed ? (
-            <DecisionSummary decision={data.decision} history={data.decisionHistory} canReopen={isHead} onReopen={() => setReopening(true)} />
+            <DecisionSummary
+              decision={data.decision}
+              history={data.decisionHistory}
+              canReopen={isHead}
+              onReopen={() => setReopening(true)}
+              canAddRecruiter={isHead && data.decision?.type === 'verified_genuine'}
+              onAddRecruiter={() => setAddingRecruiter(true)}
+            />
           ) : isHead ? (
             <>
               <Card title="Recommendation">
@@ -205,6 +231,33 @@ export default function StaffCaseDetailPage() {
           {!closed && data.decisionHistory.length > 0 && <DecisionSummary decision={null} history={data.decisionHistory} canReopen={false} />}
         </div>
       </div>
+
+      {addingRecruiter && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 p-4">
+          <div role="dialog" aria-modal="true" aria-label="Add to recruiter registry" className="mx-auto max-w-2xl space-y-4 rounded-lg bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Add to recruiter registry</h2>
+            <RecruiterForm
+            isHead={isHead}
+            initial={{
+              companyName: data.claimedCompany,
+              domains: data.decision?.verifiedDomains ?? [],
+              methods: data.decision?.checks ?? [],
+              sourceCaseId: data.id,
+            }}
+            onCancel={() => setAddingRecruiter(false)}
+            onSubmit={async (body) => {
+              try {
+                await createRecruiter(body)
+              } catch (err) {
+                throw new Error(errorMessage(err))
+              }
+              setAddingRecruiter(false)
+              setNotice(`${body.companyName} was added to the recruiter registry.`)
+            }}
+          />
+          </div>
+        </div>
+      )}
 
       {reopening && (
         <ReopenDialog

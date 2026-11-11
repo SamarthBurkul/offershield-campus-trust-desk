@@ -12,6 +12,7 @@ function navLinksFor(user) {
     return [
       { to: '/staff', label: 'Home', end: true },
       { to: '/staff/cases', label: 'Case desk' },
+      { to: '/staff/registry', label: 'Registry' },
       { to: '/staff/members', label: 'Staff' },
       ...(user.role === ROLES.TPO_HEAD ? [{ to: '/staff/audit', label: 'Audit log' }] : []),
     ]

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { listStaffCases } from '../api/staffCases.js'
 import {
   DECISION_CHECK_LABELS,
@@ -58,6 +59,7 @@ export default function DecisionForm({ caseData, onDecide }) {
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [conflict, setConflict] = useState(null)
 
   const set = (patch) => setForm((current) => ({ ...current, ...patch }))
   const problems = decisionProblems(form)
@@ -76,10 +78,12 @@ export default function DecisionForm({ caseData, onDecide }) {
   async function confirm() {
     setBusy(true)
     setError('')
+    setConflict(null)
     try {
       await onDecide(toRequestBody(form, caseData.indicators))
     } catch (err) {
       setError(err.message)
+      if (err.code === 'CONFLICTS_WITH_VERIFIED_RECRUITER') setConflict(err.details ?? {})
       setConfirming(false)
     } finally {
       setBusy(false)
@@ -203,6 +207,14 @@ export default function DecisionForm({ caseData, onDecide }) {
           </ul>
         )}
         <ErrorAlert message={error} />
+        {conflict && (
+          <p className="text-sm">
+            <Link to={`/staff/registry?recruiter=${conflict.recruiterId ?? ''}`} className="font-medium text-blue-700 underline">
+              Open {conflict.companyName ?? 'the recruiter'} in the registry
+            </Link>{' '}
+            to suspend it first.
+          </p>
+        )}
         <Button type="submit" disabled={problems.length > 0}>
           Record decision
         </Button>

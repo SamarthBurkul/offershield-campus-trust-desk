@@ -167,3 +167,51 @@
 - **Context:** New evidence can arrive after a decision; the original decision and its basis must remain reviewable.
 - **Decision:** Reopen (TPO head, with a staff-only reason) pushes the current decision into `decisionHistory` with `reopenedBy/At/Reason`, sets `decision=null` and returns the case to `under_review`. The student sees only a generic "reopened" message.
 - **Consequence:** Full history is kept on the case and in the audit log. Phase 5 must revoke registry entries derived from a reopened decision.
+
+## ADR-029: tldts for registrable domains
+
+- **Context:** `careers.infosys.com` and `infosys.com` must be treated as one organisation, `abc.co.in` must not collapse to `co.in`, and `someone.github.io` must not collapse to `github.io`.
+- **Decision:** Use `tldts` (Public Suffix List, offline) with private suffixes enabled for registrable-domain and brand-label extraction. It is the only new dependency in Phase 5.
+- **Consequence:** Correct handling of multi-part and private suffixes with no network calls. The bundled list ages with the package version and is refreshed by upgrading.
+
+## ADR-030: Homoglyph skeleton and look-alike thresholds
+
+- **Context:** Scammers imitate verified domains with digit/Cyrillic/Greek homoglyphs, typos and brand-plus-word domains.
+- **Decision:** `isLookalike(candidate, verified)` (in `services/registry/similarity.js`, thresholds in `SIMILARITY_THRESHOLDS`) is true when the registrable domains differ and: the brand-label skeletons are equal (homoglyphs → Latin, 0→o, 1→l, 3→e, 5→s, rn→m, vv→w, hyphens removed); or Levenshtein ≤ 2 for brands of ≥ 5 characters; or the brand appears as a hyphen/word-separated token (brand ≥ 3) or an unseparated substring (brand ≥ 5). The same domain or a subdomain is a match, not a look-alike.
+- **Consequence:** `tcss.in` is not flagged for `tcs.com` (too short for edit distance) but `tc5.com` (skeleton) and `tcs-careers.in` (token) are. Legitimate sister domains (`infosys.co.in`) are flagged until added to the recruiter's domains — an intentional, safe default.
+
+## ADR-031: SimHash parameters for related-text linking
+
+- **Context:** Template scams reuse the same text with different names, amounts and contacts.
+- **Decision:** 64-bit SimHash over word 3-shingles hashed with FNV-1a 64 (BigInt). Before hashing: lowercase; URLs, emails, UPI IDs and phones become placeholders; any digit run becomes one `#`; the word after a salutation ("Dear Rahul") becomes a placeholder. Link when Hamming distance ≤ `SIMHASH_MAX_DISTANCE` (default 6), messages ≥ 8 words, cases created in the last 180 days, newest 1000 candidates.
+- **Consequence:** Measured: identical 0; same template with name, amount and contacts changed 0; one word reworded 5; unrelated messages 25–30. Short or heavily rewritten messages are not linked by text (they can still link by shared indicators or manually).
+
+## ADR-032: No RDAP, DNS or WHOIS lookups in the MVP
+
+- **Context:** Domain age or DNS data would help, but fetching anything derived from user input risks SSRF, leaks investigations to third parties and adds flaky dependencies.
+- **Decision:** No network calls on user-supplied values anywhere in Phase 5; all checks are offline string analysis.
+- **Consequence:** Newly registered look-alikes are only caught by the similarity heuristics and staff judgement. Revisit with an isolated, allow-listed worker if needed.
+
+## ADR-033: Recruiter free-mail contacts rejected
+
+- **Context:** A recruiter that "verifies" a gmail address would let any gmail user look verified.
+- **Decision:** Recruiter domains and contact emails can never be free-mail providers (400 `FREE_MAIL_NOT_ALLOWED`); contact emails must be on the recruiter's own domains (400 `CONTACT_DOMAIN_MISMATCH`); lookups of free-mail addresses never match a recruiter by domain.
+- **Consequence:** Recruiters who genuinely use gmail cannot be registered; students are told to treat such contacts as not reviewed.
+
+## ADR-034: Officer-created recruiters need head approval
+
+- **Context:** A verified recruiter is shown to every student as trustworthy; mistakes are costly.
+- **Decision:** Officers can propose recruiters (`pending_approval`, invisible to lookup) and edit their own pending ones; only the TPO head creates verified records, approves, renews, suspends, or edits verified ones.
+- **Consequence:** Same accountability model as decisions (ADR-024).
+
+## ADR-035: Lookup result precedence
+
+- **Context:** A value can match several things (e.g. a fraud domain that is also a look-alike).
+- **Decision:** `confirmed_fraud` > `lookalike_warning` > `verified` > `verified_expired` > `not_reviewed`; look-alikes are only computed when no verified recruiter matches.
+- **Consequence:** The most protective message always wins. A verified recruiter never shows as verified when the value is also a confirmed fraud indicator (and the conflict rules make that state unlikely).
+
+## ADR-036: Optional `details` in the error envelope
+
+- **Context:** The decision form must link to the verified recruiter that blocks a fraud confirmation.
+- **Decision:** `AppError` may carry a safe `details` object, returned as `error.details`; currently only for `CONFLICTS_WITH_VERIFIED_RECRUITER`.
+- **Consequence:** Backwards-compatible (`code` and `message` unchanged); details must never contain secrets or another college's data.

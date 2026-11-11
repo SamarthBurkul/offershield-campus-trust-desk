@@ -55,6 +55,8 @@ Routers are built per app instance (`createApp(config)`), so tests can create ap
 | `/cases` | `authenticate`, `enforcePasswordChange`; per route `requireRole('student')` + `requireTenant` (+ `caseRateLimiter` on create, `validateBody`/`validateQuery`, and for uploads an ownership check **before** `upload` (multer)); the evidence-link route uses `requireTenant` + `requireRole('student', 'placement_officer', 'tpo_head')` |
 | `/staff/cases` | inherits `/staff` (authenticate, enforcePasswordChange, requireTenant), then `requireRole('placement_officer', 'tpo_head')`; `decision` and `reopen` add `requireRole('tpo_head')`; strict `validateBody`/`validateQuery` |
 | `/staff/audit` | inherits `/staff`, then `requireRole('tpo_head')` and `validateQuery` |
+| `/staff/registry` | inherits `/staff`, then `requireRole('placement_officer', 'tpo_head')`; approve/renew/suspend/revoke add `requireRole('tpo_head')` |
+| `/lookup` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student', 'placement_officer', 'tpo_head')`, per-user `lookupRateLimiter`, `validateQuery` |
 | `/files` | `authenticate`, `enforcePasswordChange`; the controller verifies the link token against the session user |
 
 ## Layering
@@ -65,8 +67,8 @@ routes → controllers → services → repositories → models
 
 - **routes**: URL + method → middleware chain → controller. No logic.
 - **controllers**: map request to service input and service output to response; set/clear the session cookie. No Mongoose calls.
-- **services** (`auth`, `admin`, `staff`, `audit`, `case`, `evidence`, `storage` (GridFS wrapper), `indicators/`, `caseStateMachine`, `staffCase`, `note`, `decision`, `auditQuery`): business rules and audit writes after successful actions.
-- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`, `counterRepository`, `caseRepository`, `caseEventRepository`, `evidenceRepository`, `noteRepository`, `auditLogRepository` (read-only use)). All college-scoped reads and writes go through it.
+- **services** (`auth`, `admin`, `staff`, `audit`, `case`, `evidence`, `storage` (GridFS wrapper), `indicators/`, `caseStateMachine`, `staffCase`, `note`, `decision`, `auditQuery`, `registry/` (similarity, recruiter, indicator), `lookup`, `signals/` (compute, feeLanguage, loader), `linking/` (simhash, link)): business rules and audit writes after successful actions.
+- **repositories**: `tenantRepository` wraps every college-owned model (`repositories/index.js` exports `userRepository`, `counterRepository`, `caseRepository`, `caseEventRepository`, `evidenceRepository`, `noteRepository`, `auditLogRepository` (read-only use), `fraudIndicatorRepository`, `recruiterRepository`, `lookupEventRepository`). All college-scoped reads and writes go through it.
 - **models**: Mongoose schemas `College`, `User`, `AuditLog`, `Counter`, `Case`, `CaseEvent`, `Evidence` (+ GridFS bucket `evidence`), `Note`; `models/plugins/appendOnly.js` makes `AuditLog` and `Note` append-only.
 - **validators**: zod `.strict()` body schemas.
 - **utils**: `password` (bcrypt + policy), `jwt` (sign/verify, cookie options), `tokens` (join codes, temporary passwords), `safeUser` (the single `toSafeUser()` mapper).
@@ -90,7 +92,7 @@ Documented exceptions to "models only via repositories":
 - `AuthProvider` (`src/auth/AuthContext.jsx`) loads `/auth/me` on start and exposes `user`, `college`, `loading`, `login`, `register`, `logout`, `refresh` via `useAuth()`.
 - `ProtectedRoute allowedRoles={…}`: unauthenticated → `/login`; `mustChangePassword` → `/change-password`; wrong role → Forbidden page.
 - API modules `api/auth.js`, `api/admin.js`, `api/staff.js` all use the single axios instance (`api/client.js`).
-- Routes: `/`, `/login`, `/register`, `/change-password`, `/student`, `/student/requests`, `/student/requests/new`, `/student/requests/:id`, `/staff`, `/staff/members`, `/staff/cases`, `/staff/cases/:id`, `/staff/audit` (TPO head), `/admin`, `/admin/colleges/:id`. After login: student → `/student`, staff → `/staff`, super admin → `/admin`.
+- Routes: `/`, `/login`, `/register`, `/change-password`, `/student`, `/student/requests`, `/student/requests/new`, `/student/requests/:id`, `/staff`, `/staff/members`, `/staff/cases`, `/staff/cases/:id`, `/staff/registry`, `/staff/audit` (TPO head), `/admin`, `/admin/colleges/:id`. After login: student → `/student`, staff → `/staff`, super admin → `/admin`.
 
 ## Case state machine
 
@@ -124,6 +126,29 @@ stateDiagram-v2
 | student reply | awaiting_student | under_review |
 | decision | submitted, under_review, awaiting_student | confirmed_fraud, verified_genuine, inconclusive, dismissed |
 | reopen | confirmed_fraud, verified_genuine, inconclusive, dismissed | under_review |
+
+## Decision → registry → lookup / signals / linking
+
+```mermaid
+flowchart LR
+  S[Student request<br/>case indicators = allegations] -->|create / reply| L[link.service<br/>shared indicator · SimHash]
+  S -->|create / reply| G[signals.compute]
+  D[TPO head decision<br/>confirmed_fraud] -->|conflict check BEFORE update| RC{verified recruiter<br/>owns domain?}
+  RC -- yes --> X[409 CONFLICTS_WITH_VERIFIED_RECRUITER]
+  RC -- no --> U[atomic status update]
+  U -->|after| FI[(FraudIndicator<br/>active, sourceCaseIds)]
+  RO[Reopen] -->|remove source / revoke| FI
+  H[TPO head] -->|create / approve / renew / suspend| R[(Recruiter<br/>verified)]
+  FI --> LK[GET /lookup<br/>students + staff]
+  R --> LK
+  FI -->|recompute open cases| G
+  R -->|recompute open cases| G
+  R -->|exclude recruiter domains| L
+  G --> SV[staff view only]
+  L --> SV
+```
+
+All boxes are scoped to one college; nothing crosses tenants and nothing calls the network.
 
 ## Configuration
 

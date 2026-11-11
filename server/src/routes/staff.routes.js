@@ -9,6 +9,7 @@ const { validateBody } = require('../middleware/validate');
 const { createOfficerSchema, officerStatusSchema } = require('../validators/staff.schemas');
 const { createStaffCaseRouter } = require('./staffCase.routes');
 const { createAuditRouter } = require('./audit.routes');
+const { createRegistryRouter } = require('./registry.routes');
 
 function createStaffRouter({ config, authenticate }) {
   const router = Router();
@@ -17,6 +18,7 @@ function createStaffRouter({ config, authenticate }) {
 
   router.use('/cases', createStaffCaseRouter({ config }));
   router.use('/audit', createAuditRouter());
+  router.use('/registry', createRegistryRouter({ config }));
 
   router.get('/members', requireRole('tpo_head', 'placement_officer'), controller.listMembers);
   router.post('/officers', requireRole('tpo_head'), validateBody(createOfficerSchema), controller.createOfficer);

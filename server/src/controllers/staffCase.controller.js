@@ -3,6 +3,8 @@
 const staffCaseService = require('../services/staffCase.service');
 const noteService = require('../services/note.service');
 const decisionService = require('../services/decision.service');
+const linkService = require('../services/linking/link.service');
+const { refreshCaseSignals } = require('../services/signals/loader');
 
 function createStaffCaseController(config) {
   const options = { staleDays: config.caseStaleDays };
@@ -46,6 +48,19 @@ function createStaffCaseController(config) {
     },
     async decide(req, res) {
       await decisionService.recordDecision(req.user, req.params.id, req.body, { ip: req.ip });
+      await respondWithCase(req, res);
+    },
+    async link(req, res) {
+      await linkService.linkManually(req.user, req.params.id, req.body.caseId, { ip: req.ip });
+      await respondWithCase(req, res, 201);
+    },
+    async unlink(req, res) {
+      await linkService.unlink(req.user, req.params.id, req.params.otherId, { ip: req.ip });
+      await respondWithCase(req, res);
+    },
+    async recomputeSignals(req, res) {
+      const found = await staffCaseService.findCaseOr404(req.user, req.params.id);
+      await refreshCaseSignals(req.user.collegeId, found._id);
       await respondWithCase(req, res);
     },
     async reopen(req, res) {

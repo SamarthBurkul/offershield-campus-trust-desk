@@ -18,6 +18,8 @@ All endpoints are served under **`/api/v1`**. Requests and responses use JSON (`
 { "error": { "code": "UPPER_SNAKE_CASE", "message": "Human-readable, safe message" } }
 ```
 
+A few errors add a structured, non-sensitive `error.details` object (currently only `CONFLICTS_WITH_VERIFIED_RECRUITER`: `{ recruiterId, companyName, indicator }`).
+
 No stack traces are returned in `production` (or `test`). In `development` only, unexpected 500 errors may include `error.stack`.
 
 | HTTP | `code` | When |
@@ -37,6 +39,14 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | 401 | `LINK_INVALID` | Evidence link expired, tampered, or issued to a different user |
 | 400 | `INVALID_ASSIGNEE` | Assignee is not an active placement officer / TPO head of the caller's college |
 | 400 | `INDICATOR_NOT_ON_CASE` | A confirmed indicator or verified domain is not one of the case's indicators |
+| 400 | `FREE_MAIL_NOT_ALLOWED` | Recruiter domain or contact email on a free-mail provider |
+| 400 | `CONTACT_DOMAIN_MISMATCH` | Recruiter contact email not on one of its domains |
+| 400 | `VERIFICATION_REQUIRED` | Changing a verified recruiter's domains without new methods and evidence note |
+| 400 | `INVALID_LINK` | Linking a case to itself |
+| 409 | `CONFLICTS_WITH_VERIFIED_RECRUITER` | A confirmed indicator belongs to a verified recruiter (suspend it first); includes `details` |
+| 409 | `CONFLICTS_WITH_FRAUD_INDICATOR` | A recruiter domain/contact is an active confirmed fraud indicator |
+| 409 | `INVALID_STATE` | Recruiter is not in a state that allows the action (approve/renew/suspend) |
+| 409 | `ALREADY_REVOKED` | Revoking an already revoked indicator |
 | 409 | `CASE_CLOSED` | Reply, upload, staff message, info request, assignment or recommendation on a closed case |
 | 409 | `INVALID_TRANSITION` | The case is not in a status that allows this action (e.g. a concurrent decision won) |
 | 413 | `FILE_TOO_LARGE` | An evidence file is over 3 MB |
@@ -109,6 +119,18 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | POST | `/staff/cases/:id/decision` | tpo_head | 200 | 400 `VALIDATION_ERROR` / `INDICATOR_NOT_ON_CASE`, 401, 403, 404, 409 `INVALID_TRANSITION` |
 | POST | `/staff/cases/:id/reopen` | tpo_head | 200 | 400, 401, 403, 404, 409 `INVALID_TRANSITION` |
 | GET | `/staff/audit` | tpo_head | 200 | 400, 401, 403 |
+| POST | `/staff/cases/:id/links` | placement_officer, tpo_head | 201 | 400 `INVALID_LINK`, 401, 403, 404 |
+| DELETE | `/staff/cases/:id/links/:otherId` | placement_officer, tpo_head | 200 | 401, 403, 404 |
+| POST | `/staff/cases/:id/signals/recompute` | placement_officer, tpo_head | 200 | 401, 403, 404 |
+| GET | `/staff/registry/recruiters` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| POST | `/staff/registry/recruiters` | placement_officer (→ pending), tpo_head (→ verified) | 201 | 400, 401, 403, 404 (sourceCaseId), 409 `CONFLICTS_WITH_FRAUD_INDICATOR` |
+| PATCH | `/staff/registry/recruiters/:id` | tpo_head; officer only own pending | 200 | 400 (incl. `VERIFICATION_REQUIRED`), 401, 403, 404, 409 |
+| POST | `/staff/registry/recruiters/:id/approve` | tpo_head | 200 | 401, 403, 404, 409 `INVALID_STATE` |
+| POST | `/staff/registry/recruiters/:id/renew` | tpo_head | 200 | 400, 401, 403, 404, 409 |
+| POST | `/staff/registry/recruiters/:id/suspend` | tpo_head | 200 | 400, 401, 403, 404, 409 |
+| GET | `/staff/registry/indicators` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| POST | `/staff/registry/indicators/:id/revoke` | tpo_head | 200 | 400, 401, 403, 404, 409 `ALREADY_REVOKED` |
+| GET | `/lookup` | student, placement_officer, tpo_head | 200 | 400, 401, 403, 429 |
 | GET | `/files/:token` | the user the link was issued to (session required) | 200 (file stream) | 401 `UNAUTHENTICATED` / `LINK_INVALID`, 404 |
 
 Any authenticated route can also return `403 PASSWORD_CHANGE_REQUIRED` (except the three allowed auth routes).
@@ -337,9 +359,64 @@ Final status only (else 409). Pushes the current decision to `decisionHistory` w
 
 Query `action`, `entityType`, `entityId`, `actorId`, `from`, `to`, `page`, `limit` (≤ 100, default 25). College-scoped, newest first. `{ entries: [{ id, actor: { id, name, role }, action, entity: { type, id }, metadata, createdAt }], page, limit, total }`.
 
+### Registry, lookup, links and signals (Phase 5)
+
+No route creates a fraud indicator (`POST /staff/registry/indicators` → 404). Every registry, lookup and link query is college-scoped; another college's ids → 404.
+
+#### `GET /lookup?q=` (student, placement_officer, tpo_head)
+
+`q`: 3–200 characters (strict query). Per-user limit `LOOKUP_LIMIT_PER_10MIN` (default 60) → 429. Detection order: email → UPI → phone → URL (http/https) → domain → company text.
+
+| Check | Matches |
+| --- | --- |
+| fraud | active indicators equal to the value; plus, for email/URL/domain, the domain, the host and the registrable domain. Never for company text. |
+| verified | verified recruiters owning the domain/host (same domain or a parent listed in `domains`), exact contact email or phone, or (company text) an escaped case-insensitive substring of `companyName`. Free-mail domains never match. |
+| lookalike | only for domain-bearing queries with no verified match: any verified recruiter domain for which `isLookalike` is true |
+
+`resultStatus` precedence: `confirmed_fraud` > `lookalike_warning` > `verified` > `verified_expired` > `not_reviewed`.
+
+```json
+{
+  "resultStatus": "lookalike_warning",
+  "queryType": "domain",
+  "fraudMatches": [{ "type": "upi", "value": "x@ybl", "confirmedAt": "ISO" }],
+  "verifiedRecruiters": [{ "id": "…", "companyName": "Infosys", "domains": ["infosys.com"], "methods": ["called_official_number"], "verifiedAt": "ISO", "expiresAt": "ISO", "isExpired": false }],
+  "lookalikeOf": [{ "companyName": "Infosys", "domain": "infosys.com" }],
+  "guidance": "fixed text per status"
+}
+```
+
+Never included: case or student data, `sourceCaseIds` (staff callers get `fraudMatches[].sourceCases [{ id, caseNumber }]`), `evidenceNote`, verifier names, pending or suspended recruiters. Guidance never uses "safe" or "genuine"; `not_reviewed` says "Not reviewed does not mean safe." A LookupEvent (no query text) is stored.
+
+#### `/staff/registry/recruiters`
+
+- `GET` — `q` (escaped company substring, or exact domain/email/phone), `status`, `page`, `limit ≤ 50`. Items include verification (with evidenceNote and verifier), history, `isExpired`.
+- `POST` — `{ companyName, domains, contactEmails?, contactPhones?, methods, evidenceNote, expiresInDays? (30–730, default RECRUITER_VERIFICATION_DAYS=365), sourceCaseId? }`. Officer → `pending_approval`; head → `verified` (verifiedBy, verifiedAt, expiresAt). Audit `recruiter.create`.
+- `PATCH /:id` — `{ companyName?, domains?, contactEmails?, contactPhones?, methods?, evidenceNote?, expiresInDays? }`. Head: any record; officer: only own pending. Domain change on a verified record requires methods + evidenceNote and pushes history. Audit `recruiter.update` (field names only).
+- `POST /:id/approve` (head) pending → verified; `/:id/renew` (head) `{ methods, evidenceNote, expiresInDays? }` verified only, pushes history; `/:id/suspend` (head) `{ reason 10–500 }`. Audited.
+
+Recruiter changes recompute signals of the college's open cases.
+
+#### `/staff/registry/indicators`
+
+- `GET` — `type`, `status`, `q` (normalised exact), `page`, `limit ≤ 100`. Items: `{ id, type, value, status, sourceCases [{ id, caseNumber }], firstConfirmedAt, lastConfirmedAt, revokedAt, revokeReason }`.
+- `POST /:id/revoke` (head) `{ reason 10–500 }` → revoked; audit `indicator.revoke` (no reason text); signals recomputed.
+
+#### Links and signals on a case
+
+- `POST /staff/cases/:id/links` `{ caseId }` → reason `manual` on both cases; audit `case.link`; staff-only `linked` events.
+- `DELETE /staff/cases/:id/links/:otherId` → removed on both sides; audit `case.unlink`.
+- `POST /staff/cases/:id/signals/recompute` (empty body) → refreshed StaffCaseView.
+
+StaffCaseView now also has `signals`, `signalsComputedAt` and `related [{ caseId, caseNumber, status, claimedCompany, reasons, sharedIndicators, similarity, detectedAt }]`; queue items have `relatedCount` and `topSignal`. Student views never include `signals`, `related`, `linkedCaseIds` or `textHash`.
+
+#### Decision side effects (Phase 5)
+
+- `confirmed_fraud`: before the atomic update, any confirmed indicator whose domain (domain, email domain or URL host) belongs to a verified recruiter → 409 `CONFLICTS_WITH_VERIFIED_RECRUITER` with `details`. After the update: each confirmed indicator is upserted active with the case as a source; audit `indicator.publish`; open cases carrying them get signals recomputed.
+- Reopen of a confirmed_fraud case: the case is removed as a source; indicators left with no source are revoked (`source_case_reopened`); audit `indicator.revoke`; signals recomputed.
+
 ## Planned route groups (not implemented)
 
 | Group | Phase | Purpose |
 | --- | --- | --- |
-| `/api/v1/registry/*`, `/api/v1/lookup` | 5 | Registry, student lookup, linking, warning signals |
 | `/api/v1/advisories`, `/api/v1/notifications`, `/api/v1/stats` | 6 | Advisories, notifications, statistics |

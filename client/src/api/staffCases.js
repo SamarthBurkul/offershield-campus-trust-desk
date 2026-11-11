@@ -59,3 +59,18 @@ export async function reopenCase(id, reason) {
   const { data } = await apiClient.post(casePath(id, '/reopen'), { reason })
   return data.case
 }
+
+export async function linkCase(id, otherCaseId) {
+  const { data } = await apiClient.post(casePath(id, '/links'), { caseId: otherCaseId })
+  return data.case
+}
+
+export async function unlinkCase(id, otherCaseId) {
+  const { data } = await apiClient.delete(casePath(id, `/links/${encodeURIComponent(otherCaseId)}`))
+  return data.case
+}
+
+export async function recomputeSignals(id) {
+  const { data } = await apiClient.post(casePath(id, '/signals/recompute'), {})
+  return data.case
+}

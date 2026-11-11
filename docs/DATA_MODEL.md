@@ -1,6 +1,6 @@
 # Data Model
 
-> **Status:** `colleges`, `users`, `auditlogs` (Phase 2); `counters`, `cases`, `caseevents`, `evidences` + GridFS bucket `evidence` (Phase 3); `notes` and the case recommendation/decision/history fields (Phase 4) are **implemented**. Other collections are planned.
+> **Status:** Phases 2–5 collections are **implemented**: `colleges`, `users`, `auditlogs`; `counters`, `cases`, `caseevents`, `evidences` + GridFS `evidence`; `notes`; `fraudindicators`, `recruiters`, `lookupevents`. Other collections (advisories, notifications) are planned.
 
 ## Global rules
 
@@ -100,8 +100,11 @@ Indexes: unique `{ collegeId: 1, key: 1 }`.
 | `priority` | String | normal or high; high when money was requested or already paid |
 | `assigneeId` | ObjectId or null | active placement_officer or tpo_head of the same college |
 | `indicators` | [{ type: email/domain/phone/upi/url, value, source: student_entered/extracted }] | extracted at creation, extended on student replies (max 100) |
-| `signals` | [Mixed] | Phase 5 |
-| `linkedCaseIds` | [ObjectId] | Phase 5 |
+| `signals` | [{ code, severity, message, detail }] | staff-only warning signals (Phase 5) |
+| `signalsComputedAt` | Date or null | |
+| `linkedCaseIds` | [ObjectId] | mirror of `related[].caseId` |
+| `related` | [object] | staff-only related-case links (Phase 5) |
+| `textHash` | String or null | 16-hex SimHash of the normalised messageText |
 | `recommendation` | { type, basis, by, at } or null | staff-only; see Phase 4 below |
 | `decision` | object or null | final TPO-head decision; see Phase 4 below |
 | `decisionHistory` | [object] | earlier decisions moved here on reopen |
@@ -115,7 +118,7 @@ Indexes: unique `{ collegeId, caseNumber }`; `{ collegeId, status, createdAt: -1
 | Field | Type | Rules |
 | --- | --- | --- |
 | `collegeId`, `caseId` | ObjectId | required |
-| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened, recommendation_made (always `visibleToStudent=false`) |
+| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened, recommendation_made and linked (both always `visibleToStudent=false`) |
 | `actorId`, `actorRole` | ObjectId, String | who acted |
 | `body` | String or null | ≤ 3000 |
 | `visibleToStudent` | Boolean | **required, no default** — every writer decides explicitly |
@@ -187,12 +190,59 @@ Indexes: `{ collegeId, caseId, createdAt }`. Same append-only plugin as `auditlo
 
 `decisionHistory`: array of earlier decisions (all fields above) plus `reopenedBy`, `reopenedAt`, `reopenReason` (10–1000, staff-only). Reopen moves the current decision here and sets `decision` to null.
 
+## Implemented in Phase 5
+
+### `fraudindicators` — model `FraudIndicator` (confirmed fraud registry)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId` | ObjectId | required |
+| `type` | String | email, domain, phone, upi or url |
+| `value` | String | normalised (same normalisers as case indicators) |
+| `status` | String | active or revoked |
+| `sourceCaseIds` | [ObjectId] | confirmed_fraud cases that confirmed it (`$addToSet`) |
+| `firstConfirmedAt`, `lastConfirmedAt` | Date | |
+| `createdBy` | ObjectId → User | TPO head of the first decision |
+| `revokedAt`, `revokedBy`, `revokeReason` | | `source_case_reopened` or the head's manual reason |
+| timestamps | | |
+
+Indexes: unique `{ collegeId, type, value }`; `{ collegeId, status }`. **No API creates one**: only a confirmed_fraud decision publishes, only a reopen or the head's manual revoke revokes.
+
+### `recruiters` — model `Recruiter`
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `collegeId` | ObjectId | required |
+| `companyName` | String | 2–120 |
+| `domains` | [String] | 1–20, normalised (lowercase, punycode, no www.), never free-mail |
+| `contactEmails` | [String] | ≤ 10; each on one of `domains` (or a subdomain); never free-mail |
+| `contactPhones` | [String] | ≤ 10, `+91…` |
+| `status` | String | pending_approval, verified or suspended |
+| `verification` | { methods[] ≥1 (decision-check vocabulary), evidenceNote 20–2000, verifiedBy, verifiedAt, expiresAt, validForDays 30–730 } | verifiedBy/At/expiresAt are null while pending |
+| `verificationHistory` | [verification + replacedAt, replacedBy] | pushed on renew and on domain changes |
+| `sourceCaseId` | ObjectId or null | a case of the same college |
+| `createdBy` | ObjectId → User | |
+| `suspendedReason` | String or null | |
+| `isExpired` (virtual) | Boolean | `status === 'verified' && expiresAt < now` |
+
+Indexes: `{ collegeId, status }`, `{ collegeId, domains }`, `{ collegeId, contactEmails }`, `{ collegeId, contactPhones }`.
+
+### `lookupevents` — model `LookupEvent` (metrics only)
+
+`collegeId`, `userId`, `role`, `queryType` (email, upi, phone, url, domain, company), `resultStatus`, `createdAt`. **The query text is never stored.** Index `{ collegeId, createdAt: -1 }`.
+
+### Case: related cases, signals, text hash
+
+`related[]`: `{ caseId, reasons[] (shared_indicator, similar_text, manual), sharedIndicators[{ type, value }], similarity (0–1, from SimHash distance) or null, linkedBy or null, detectedAt }` — mirrored on both cases, kept in sync with `linkedCaseIds`, same college only.
+
+`signals[]`: `{ code, severity (info, warning, high), message, detail }`, recomputed on create, student reply, registry changes and on demand. Never changes status or priority.
+
+`textHash`: 64-bit SimHash (16 hex) of the normalised `messageText`. Index `{ collegeId, createdAt: -1, textHash: 1 }`.
+
 ## Planned collections
 
 | Collection | Phase | Purpose | Key fields |
 | --- | --- | --- | --- |
-| `recruiters` | 5 | Reviewed recruiter records | `collegeId`, `name`, `officialDomains[]`, `status`, `sourceCaseIds[]`, `reviewedBy` |
-| `indicators` | 5 | Confirmed suspicious indicators | `collegeId`, `type`, `value`, `normalizedValue` (indexed), `recruiterId`, `sourceCaseId`, `decisionId`, `active` |
 | `advisories` | 6 | TPO-published advisories | `collegeId`, `title`, `body`, `severity`, `audience`, `publishedBy`, `status` |
 | `acknowledgements` | 6 | Student acknowledgement of advisories | `collegeId`, `advisoryId`, `userId` (unique with `advisoryId`) |
 | `notifications` | 6 | In-app notifications | `collegeId`, `userId`, `type`, `title`, `link`, `readAt` |
@@ -200,5 +250,4 @@ Indexes: `{ collegeId, caseId, createdAt }`. Same append-only plugin as `auditlo
 ## Key indexes (planned)
 
 - `{ collegeId: 1, ... }` as the leading key on every college-owned collection.
-- `indicators`: `{ collegeId: 1, type: 1, normalizedValue: 1 }`.
 - `acknowledgements`: `{ advisoryId: 1, userId: 1 }` unique.
