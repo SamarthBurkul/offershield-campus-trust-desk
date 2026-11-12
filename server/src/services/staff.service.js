@@ -10,6 +10,52 @@ const { toStaffSummary } = require('../utils/safeUser');
 const audit = require('./audit.service');
 
 const staffNotFound = () => new AppError(404, 'NOT_FOUND', 'Staff member not found');
+const userNotFound = () => new AppError(404, 'NOT_FOUND', 'User not found');
+
+/**
+ * Replace a user's password with a one-time temporary password: the user must change it at next
+ * sign-in and every existing session ends. The password is returned once and never stored or logged.
+ * @param {object} target user document (already scoped and authorised by the caller)
+ */
+async function issueTemporaryPassword(target, actor, { ip }) {
+  // Every resettable account (student, officer, TPO head) belongs to a college.
+  if (!target.collegeId) throw userNotFound();
+  const temporaryPassword = generateTemporaryPassword();
+  await userRepository.forTenant(target.collegeId).updateOne(
+    { _id: target._id },
+    { $set: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true }, $inc: { tokenVersion: 1 } },
+  );
+
+  await audit.record({
+    collegeId: target.collegeId,
+    actor,
+    action: 'user.password_reset',
+    entityType: 'user',
+    entityId: target._id,
+    metadata: { targetRole: target.role },
+    ip,
+  });
+  return { user: toStaffSummary(target), temporaryPassword };
+}
+
+// Which roles each staff role may reset: heads reset officers and students; officers reset students.
+const RESETTABLE_BY = Object.freeze({
+  [ROLES.TPO_HEAD]: [ROLES.PLACEMENT_OFFICER, ROLES.STUDENT],
+  [ROLES.PLACEMENT_OFFICER]: [ROLES.STUDENT],
+});
+
+/** Staff-assisted reset inside the actor's own college (no email is sent; the actor hands it over). */
+async function resetPassword(actor, tenant, userId, { ip }) {
+  const target = await userRepository.forTenant(tenant.collegeId).findById(userId, { lean: true });
+  if (!target) throw userNotFound();
+  if (String(target._id) === actor.id) {
+    throw new AppError(400, 'CANNOT_MODIFY_SELF', 'Use "Change password" to change your own password');
+  }
+  if (!(RESETTABLE_BY[actor.role] ?? []).includes(target.role)) {
+    throw new AppError(403, 'FORBIDDEN', 'You cannot reset the password of this account');
+  }
+  return issueTemporaryPassword(target, actor, { ip });
+}
 
 /**
  * Create a staff account in a college with a one-time temporary password.
@@ -102,4 +148,4 @@ async function setOfficerStatus(actor, tenant, officerId, status, { ip }) {
   return toStaffSummary({ ...target.toObject(), status });
 }
 
-module.exports = { createStaffAccount, listStaff, createOfficer, setOfficerStatus };
+module.exports = { createStaffAccount, listStaff, createOfficer, setOfficerStatus, resetPassword, issueTemporaryPassword };

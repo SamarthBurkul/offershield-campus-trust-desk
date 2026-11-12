@@ -87,6 +87,8 @@ describe('unexpected errors in production', () => {
         getHealth: () => {
           throw new Error('boom: secret internal detail');
         },
+        getReady: () => {},
+        createPoliciesHandler: () => () => {},
       }));
       const { createApp } = require('../src/app');
       prodApp = createApp(
@@ -94,7 +96,9 @@ describe('unexpected errors in production', () => {
           NODE_ENV: 'production',
           MONGODB_URI: 'mongodb://127.0.0.1:1/unused',
           JWT_SECRET: 'test-only-production-secret-0123456789abcdef',
+          CLIENT_ORIGINS: 'https://desk.example.edu',
         }),
+        { serveClient: false, logSink: () => {} },
       );
     });
 

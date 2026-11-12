@@ -4,11 +4,11 @@
 
 | Control | Where | Detail |
 | --- | --- | --- |
-| Security headers | `app.js` | `helmet()` defaults; `x-powered-by` disabled |
+| Security headers | `app.js` | `helmet()` (explicit CSP since Phase 7, see below); `x-powered-by` disabled |
 | CORS allow-list | `app.js`, `config/env.js` | Only origins in `CLIENT_ORIGINS` get `Access-Control-Allow-Origin`, with credentials |
 | Body size limit | `app.js` | `express.json({ limit: '100kb' })` → `413 PAYLOAD_TOO_LARGE` |
-| Rate limiting | `middleware/rateLimiter.js` | Baseline per-IP limit on all `/api` routes → `429 RATE_LIMITED` |
-| Safe error handling | `middleware/errorHandler.js` | Standard envelope; fixed messages for parser and mongoose validation errors; no stack traces outside development; logs method, path and code only |
+| Rate limiting | `middleware/rateLimiter.js` | Baseline limit on all `/api` routes → `429 RATE_LIMITED` (per user or per IP since Phase 7) |
+| Safe error handling | `middleware/errorHandler.js` | Standard envelope; fixed messages for parser and mongoose validation errors; no stack traces outside development; logs request id and code only (Phase 7) |
 | Env validation | `config/env.js` | zod schema, fail-fast, key names only in errors; only module reading `process.env` (ESLint rule) |
 | Secret hygiene | `.gitignore`, `.env.example` | `.env` ignored; examples hold placeholders only |
 
@@ -54,10 +54,7 @@ CSRF: the API is cookie-authenticated and same-origin (Vite proxy in development
 
 | Limiter | Scope | Default |
 | --- | --- | --- |
-| Baseline | all `/api` | 300 requests / 15 min / IP |
-| Auth | `POST /auth/login` and `POST /auth/register` (shared counter) | 10 requests / 15 min / IP (`AUTH_RATE_LIMIT_*`) |
-
-Both answer `429 RATE_LIMITED`.
+Superseded in Phase 7 (keyed per user / per IP + email, see "Fair rate limits"). The Phase 2 design was a per-IP baseline (300 / 15 min) and one shared login + registration limiter (10 / 15 min / IP).
 
 ### Audit log
 
@@ -227,12 +224,74 @@ Notification text is produced only by `services/notifications/templates.js` from
 
 The client polls the unread count every 30 s (paused while the tab is hidden, refreshed on focus). No WebSocket, push or email channel exists, so there is no extra authenticated long-lived connection to secure (ADR-037).
 
+## Implemented in Phase 7
+
+### Fair rate limits on shared campus IPs
+
+Many students reach the service from one campus NAT address, so IP-only limits would lock out a whole college (ADR-042).
+
+| Limiter | Key | Default (config) |
+| --- | --- | --- |
+| Baseline `/api`, signed in | user id from the session JWT (signature/expiry check only, no DB query) | 600 / 15 min (`API_USER_RATE_LIMIT_MAX`, `API_RATE_LIMIT_WINDOW_MS`) |
+| Baseline `/api`, anonymous or invalid cookie | IP | 300 / 15 min (`API_RATE_LIMIT_MAX`) |
+| `POST /auth/login` | IP + normalised email | 10 / 15 min (`AUTH_RATE_LIMIT_MAX`, `AUTH_RATE_LIMIT_WINDOW_MS`) |
+| `POST /auth/login` | IP | 200 / 15 min (`AUTH_IP_RATE_LIMIT_MAX`) |
+| `POST /auth/register` | IP | 60 / hour (`REGISTER_RATE_LIMIT_MAX`, `REGISTER_RATE_LIMIT_WINDOW_MS`) |
+| `POST /cases`, `GET /lookup` | user (unchanged) | `CASE_CREATE_LIMIT_PER_HOUR`, `LOOKUP_LIMIT_PER_10MIN` |
+
+A forged or expired cookie does not verify, so it is counted by IP and cannot borrow another user's budget. `TRUST_PROXY` (default 0 locally, 1 in production) sets Express `trust proxy`, so behind Render's proxy `req.ip` is the client address from `X-Forwarded-For`; with 0 that header is ignored and cannot be used to dodge limits. IPv6 addresses are grouped by subnet (`ipKeyGenerator`). All limiters answer `429 RATE_LIMITED`; counters are in memory per process.
+
+### Manual-approval students
+
+- `College.studentVerification`: `email_domain` (default, unchanged) or `manual_approval` for colleges without student email addresses (ADR-043). In manual mode any valid email registers, but the college code and join code are still required, and the account starts as `pending_approval`.
+- A pending student can sign in, but `enforcePasswordChange` → `enforceApproved` (`middleware/pendingApproval.js`), applied by every authenticated router, answers `403 ACCOUNT_PENDING_APPROVAL` for everything except `GET /auth/me`, `POST /auth/logout` and `POST /auth/change-password`. Pending students are not part of advisory audiences (active students only).
+- `rejected` and `disabled` accounts cannot sign in (the same generic 401) and lose their sessions (`tokenVersion` is incremented).
+- Approve, reject, bulk approve and enable/disable are college-scoped through the tenant repository (another college's id → 404, bulk approve silently skips it) and audited as `student.approve`, `student.reject` (only whether a reason was given) and `student.status_change`.
+- The `student_pending` notification to staff is template text only, with no name or email.
+- `isDemo` is not accepted by any API schema (strict → 400); only seed scripts set it.
+
+### Staff-assisted password reset
+
+No email is sent (ADR-044). `POST /staff/users/:id/reset-password`: a TPO head may reset placement officers and students, an officer only students, nobody their own account here, and TPO heads only via `POST /admin/users/:id/reset-password` (super admin). The target is loaded through the tenant repository (another college → 404). The response carries a fresh 16-character temporary password **once**; the account gets `mustChangePassword=true` and `tokenVersion+1` (all sessions end). Audit `user.password_reset` stores only the target role; the password is never stored in plain text, logged or audited, and the client shows it in the one-time panel.
+
+### Consent
+
+Registration requires `acceptPolicies: true` (strict schema, otherwise 400). The user stores `policiesAcceptedAt` and `policiesVersion`; the audit entry `auth.register` records the version. `/privacy` and `/terms` describe the actual data handling; `GET /api/v1/policies` serves the version, `RETENTION_MONTHS` and `SUPPORT_EMAIL` (no secrets).
+
+### Production hardening (one service)
+
+- In production Express also serves `client/dist` (ADR-045): `/assets/*` `Cache-Control: public, max-age=31536000, immutable`, `index.html` `no-cache`, SPA fallback for non-`/api` GETs that accept HTML, JSON 404 for unknown `/api/*`, plain 404 for a missing asset.
+- Helmet CSP (all environments): `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'`. HSTS `max-age=15552000; includeSubDomains` in production only. Evidence downloads keep their own `Content-Security-Policy: sandbox`.
+- `compression` for responses.
+- Startup refuses to run in production (exit 1, message names keys and rules only) when `MONGODB_URI` is missing, `JWT_SECRET` is shorter than 32 characters or equals the `.env.example` placeholder, or `CLIENT_ORIGINS` is not set.
+- `COOKIE_SECURE_OVERRIDE=false` is a development-only escape hatch for a local production smoke on plain http; it is ignored when `APP_BASE_URL` is https.
+- Graceful shutdown on SIGTERM/SIGINT: stop accepting connections, finish in-flight requests, disconnect MongoDB, force-exit after 10 s.
+
+### Request logging
+
+`middleware/requestId.js` gives every request an id (a safe incoming `X-Request-Id` is kept) and returns it as `X-Request-Id`. `middleware/requestLogger.js` writes one JSON line per request `{ t, requestId, method, path, status, ms, uid? }`. `path` never includes the query string (lookup queries are personal data); bodies, headers, cookies and tokens are never logged. The error handler logs `{ t, requestId, code }` only (before Phase 7 it logged `req.originalUrl`, which included query strings; removed). A sweep found no other `console.*` of bodies, queries, tokens or passwords.
+
+### Demo isolation and retention
+
+- `College.isDemo` marks demo colleges (`demo-campus`, `demo-alpha`, `demo-beta`). `seed:showcase --reset` deletes data only for colleges with `isDemo: true` (every collection by `collegeId`, GridFS files by `metadata.collegeId`), so a real college can never be reset (ADR-046). Seeds refuse to run in production unless `ALLOW_DEMO_SEED=true`. All showcase scam contacts are fictional (`-demo.xyz` domains, UPI handles containing `demo`, `+91 90000 0000X` phones).
+- `ops:retention` (dry run by default) deletes evidence files of cases decided more than `RETENTION_MONTHS` ago, never the cases, and records a staff-only `evidence_purged` event and an `evidence.purged` audit entry per case (ADR-047).
+- The client shows "Demo environment — sample data" for users of an `isDemo` college (`isDemo` is part of the `/auth/me` college summary).
+
+### Dependency audit
+
+`npm audit --omit=dev`: 0 vulnerabilities at the end of Phase 7. The only new dependency is `compression`.
+
+See [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md) for the test that proves each rule.
+
 ## Known limitations
 
 - **No email OTP verification in the MVP.** Student registration is controlled by the college email domain plus the college's join code (the pilot control, ADR-012). Someone who knows the join code could register with an address on the college's domain that they do not own. Mitigations: rotate the join code, disable accounts, add email verification later.
-- No password reset by email; staff passwords are reset by re-creating access (planned later).
+- No self-service password reset: a student or officer asks staff, who hand over a temporary password in person or by phone (ADR-044). A TPO head is reset by the super admin.
+- In manual-approval colleges, staff must check each registration against their enrolment list; a person who knows the join code can still create a pending account.
 - Logout clears the cookie but does not revoke a copied token before it expires (≤ 8 h). Password change or disabling the account does revoke it.
-- Rate-limit state is in memory per process and `trust proxy` is not configured yet; both are set in Phase 7 (Render deployment).
+- Rate-limit state is in memory per process: a restart resets counters, and running more than one instance would need a shared store.
+- Request logs go to stdout only (the platform's log view); there is no log shipping or alerting.
+- The retention script is run by hand (no scheduler on the free plan) and deletes evidence only; case text is kept.
 - PDFs are not sanitised (they may carry author metadata or active content); they are only downloaded as attachments under `CSP: sandbox` and opened in the user's own viewer.
 - Images are not decoded or re-encoded: metadata segments are removed, but pixel content (e.g. a visible ID card in a screenshot) is not inspected. Students are asked to crop IDs out.
 - No malware scanning of uploads in the MVP.

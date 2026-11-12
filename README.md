@@ -2,7 +2,9 @@
 
 OfferShield is a Campus Recruitment Trust & Verification Desk for colleges. Students can search their college's reviewed recruiter records and confirmed suspicious indicators, and submit structured verification requests, with evidence, for suspicious external job or internship offers. Placement staff investigate each request as a case, the TPO head records the final decision with reasons, confirmed findings go into the college's registry, and the TPO publishes targeted advisories to students. It is multi-tenant (one tenant = one college) and is **not** a scam-detecting AI, placement ERP, job portal, recruiter marketplace or ATS — automated checks only assist staff and never decide whether an offer is genuine.
 
-> **Status:** Phases 1–5 passed review; Phase 6 (advisories, notifications, stats, UI polish) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
+> **Status:** Phases 1–6 passed review; Phase 7 (pilot readiness, production build, demo college) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
+>
+> **Live demo:** <URL> (to be added after the Render deployment)
 
 ## What it does
 
@@ -11,9 +13,20 @@ OfferShield is a Campus Recruitment Trust & Verification Desk for colleges. Stud
 - **TPO head:** record evidence-based decisions, maintain the verified-recruiter and confirmed-fraud registries, publish advisories to the batches at risk, and track impact on the stats page and audit log.
 - **What makes it different:** findings come only from accountable TPO-head decisions, are revoked when a case is reopened, stay inside one college, and never certify an offer as "safe".
 
+Pilot features (Phase 7):
+
+- **Colleges without student email:** per-college *manual approval* mode — students register with any email and the placement cell approves them.
+- **Staff-assisted password resets** (no email needed) and student account management (approve, reject, bulk approve, disable).
+- **Fair rate limits** for a whole campus behind one IP (per user when signed in, per email at login).
+- **Privacy notice and terms** with recorded consent; evidence **retention** script.
+- **One production service:** Express serves the built client with a strict CSP, HSTS, caching and compression; JSON request logs with request ids; readiness check for Render.
+- **Showcase demo college** ("Demo Institute of Technology") with six weeks of realistic, anonymised activity, resettable with one command.
+
+Guides: [placement cell](docs/GUIDE_PLACEMENT_CELL.md) · [students](docs/GUIDE_STUDENT.md) · [deployment](docs/DEPLOYMENT.md) · [operations](docs/OPERATIONS.md)
+
 ## Prerequisites
 
-- Node.js **20 or newer** (current LTS recommended) — check with `node -v`
+- Node.js **20 or newer** (22 in production, see `.node-version`) — check with `node -v`
 - npm 10 or newer — check with `npm -v`
 - Windows PowerShell 5.1+ (commands below), or any shell with equivalent commands
 
@@ -34,6 +47,7 @@ if (-not (Test-Path client\.env)) { Copy-Item client\.env.example client\.env } 
 # 3. Edit server\.env: set MONGODB_URI, JWT_SECRET (32+ chars) and the SEED_* values, then seed
 npm run seed:superadmin -w server
 npm run seed:demo -w server     # demo colleges demo-alpha / demo-beta (not in production)
+npm run seed:showcase -w server # realistic demo college demo-campus (add -- --reset to rebuild all demo colleges)
 
 # 4. Run API (http://localhost:5000) and client (http://localhost:5173) together
 npm run dev
@@ -47,6 +61,9 @@ npm run test:client
 # 6. Lint and build
 npm run lint
 npm run build          # outputs client\dist
+
+# 7. Production mode locally (one service on http://localhost:5000 serving the built client)
+npm start              # requires CLIENT_ORIGINS and a real JWT_SECRET; see docs/DEPLOYMENT.md
 ```
 
 Check the API while `npm run dev` is running:
@@ -61,6 +78,7 @@ Invoke-RestMethod http://localhost:5173/api/v1/health    # through the Vite dev 
 | Script | What it does |
 | --- | --- |
 | `npm run dev` | Starts server (nodemon) and client (Vite) together via `concurrently` |
+| `npm start` | Production server (`--production`), serving the API and `client/dist` |
 | `npm run dev:server` / `npm run dev:client` | Starts one side only |
 | `npm test` | Server tests (Jest) then client tests (Vitest) |
 | `npm run test:server` / `npm run test:client` | One side only |
@@ -68,6 +86,8 @@ Invoke-RestMethod http://localhost:5173/api/v1/health    # through the Vite dev 
 | `npm run lint` | ESLint on the server, oxlint on the client |
 | `npm run seed:superadmin -w server` | Create the super admin from `SEED_SUPERADMIN_*` (idempotent) |
 | `npm run seed:demo -w server` | Create demo colleges, staff and students using `SEED_DEMO_PASSWORD` (idempotent) |
+| `npm run seed:showcase -w server [-- --reset]` | Create the showcase demo college; `--reset` deletes and rebuilds every `isDemo` college |
+| `npm run ops:retention -w server [-- --apply]` | Evidence retention: dry run by default, `--apply` deletes evidence of cases closed more than `RETENTION_MONTHS` ago |
 
 ## Project structure
 
@@ -89,7 +109,7 @@ offershield-campus-trust-desk/
       repositories/     tenantRepository (college-scoped data access)
       services/         auth, admin, staff, audit
       validators/       zod .strict() body schemas
-    scripts/            seed-superadmin.js, seed-demo.js
+    scripts/            seed-superadmin.js, seed-demo.js, seed-showcase.js, ops-retention.js, lib/ (shared seed and ops helpers)
     tests/              Jest + Supertest
   client/               React + Vite + Tailwind CSS v4
     src/
@@ -111,3 +131,8 @@ offershield-campus-trust-desk/
 - [Security design](docs/SECURITY_DESIGN.md)
 - [Decisions (ADRs)](docs/DECISIONS.md)
 - [Phase status](docs/PHASE_STATUS.md)
+- [Security checklist](docs/SECURITY_CHECKLIST.md)
+- [Deployment (Render + Atlas)](docs/DEPLOYMENT.md)
+- [Operations](docs/OPERATIONS.md)
+- [Guide for the placement cell](docs/GUIDE_PLACEMENT_CELL.md)
+- [Guide for students](docs/GUIDE_STUDENT.md)

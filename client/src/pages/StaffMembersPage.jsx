@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { errorMessage } from '../api/errors.js'
 import { createOfficer, listStaffMembers, setOfficerStatus } from '../api/staff.js'
+import { resetUserPassword } from '../api/students.js'
 import { ROLE_LABELS, ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import { Button, Card, ErrorAlert, OneTimeSecret, StatusBadge, TextField } from '../components/ui.jsx'
@@ -16,6 +17,7 @@ export default function StaffMembersPage() {
   const [actionError, setActionError] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [secret, setSecret] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -44,11 +46,27 @@ export default function StaffMembersPage() {
     }
   }
 
+  async function resetPassword(member) {
+    setActionError('')
+    setBusyId(member.id)
+    try {
+      const { temporaryPassword } = await resetUserPassword(member.id)
+      setSecret({ email: member.email, password: temporaryPassword })
+    } catch (err) {
+      setActionError(errorMessage(err))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Staff members</h1>
 
       {canManage && <CreateOfficerCard onCreated={() => setReloadKey((key) => key + 1)} />}
+      {secret && (
+        <OneTimeSecret label={`Temporary password for ${secret.email}`} value={secret.password} onDismiss={() => setSecret(null)} />
+      )}
 
       <Card title="Your college's staff">
         <ErrorAlert message={loadError || actionError} />
@@ -77,13 +95,18 @@ export default function StaffMembersPage() {
                     {canManage && (
                       <td className="py-2">
                         {member.role === ROLES.PLACEMENT_OFFICER && (
-                          <Button
-                            variant={member.status === 'active' ? 'danger' : 'secondary'}
-                            disabled={busyId === member.id}
-                            onClick={() => toggleStatus(member)}
-                          >
-                            {member.status === 'active' ? 'Disable' : 'Enable'}
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant={member.status === 'active' ? 'danger' : 'secondary'}
+                              disabled={busyId === member.id}
+                              onClick={() => toggleStatus(member)}
+                            >
+                              {member.status === 'active' ? 'Disable' : 'Enable'}
+                            </Button>
+                            <Button variant="secondary" disabled={busyId === member.id} onClick={() => resetPassword(member)}>
+                              Reset password
+                            </Button>
+                          </div>
                         )}
                       </td>
                     )}

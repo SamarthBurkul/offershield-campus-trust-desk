@@ -30,7 +30,7 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | 400 | `REGISTRATION_REJECTED` | Unknown/suspended college code, email domain not allowed, or wrong join code (one generic message) |
 | 400 | `EMAIL_DOMAIN_MISMATCH` | Staff email domain is not one of the college's domains |
 | 400 | `INVALID_CURRENT_PASSWORD` | Change password with a wrong current password |
-| 400 | `CANNOT_MODIFY_SELF` | TPO head tries to change their own status |
+| 400 | `CANNOT_MODIFY_SELF` | TPO head tries to change their own status, or staff try to reset their own password |
 | 400 | `SENSITIVE_ID_DETECTED` | Request text or contacts contain a PAN or a checksum-valid Aadhaar number (value never echoed) |
 | 400 | `UNSUPPORTED_FILE_TYPE` | Evidence is not PNG/JPEG/PDF by content, or the image is damaged |
 | 400 | `TOO_MANY_FILES` | More than 5 files in one upload, or more than 10 on one case |
@@ -58,12 +58,14 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | 401 | `INVALID_CREDENTIALS` | Login failed (unknown email, wrong password, disabled user, suspended college — identical body) |
 | 403 | `FORBIDDEN` | Role not allowed, super admin on a college route, or target is a TPO head |
 | 403 | `PASSWORD_CHANGE_REQUIRED` | Temporary password must be changed first |
+| 403 | `ACCOUNT_PENDING_APPROVAL` | Student of a manual-approval college not yet approved (everything except `GET /auth/me`, `POST /auth/logout`, `POST /auth/change-password`) |
+| 409 | `INVALID_STATUS_CHANGE` | Student approve/reject/enable/disable from a status that does not allow it |
 | 404 | `NOT_FOUND` | No route, or resource does not exist **or belongs to another college** |
 | 409 | `EMAIL_TAKEN` | Email already registered |
 | 409 | `COLLEGE_CODE_TAKEN` | College code already used |
 | 409 | `CONFLICT` | Other unique-index violation |
 | 413 | `PAYLOAD_TOO_LARGE` | Body over 100 kb |
-| 429 | `RATE_LIMITED` | Baseline `/api` limit, or the stricter auth limit on login/register |
+| 429 | `RATE_LIMITED` | Baseline `/api` limit (per user when signed in, else per IP), login (per IP + email and per IP), registration (per IP), case creation or lookup (per user) |
 | 500 | `INTERNAL_ERROR` | Any unexpected error |
 
 ## Objects
@@ -89,7 +91,9 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | Method | Path | Roles | Success | Error codes |
 | --- | --- | --- | --- | --- |
 | GET | `/health` | public | 200 | 429 |
-| POST | `/auth/register` | public (creates `student`) | 201 + cookie | 400 `VALIDATION_ERROR` / `REGISTRATION_REJECTED`, 409 `EMAIL_TAKEN`, 429 |
+| GET | `/health/ready` | public | 200 / 503 | 429 |
+| GET | `/policies` | public | 200 | 429 |
+| POST | `/auth/register` | public (creates `student`; `pending_approval` in manual-approval colleges) | 201 + cookie | 400 `VALIDATION_ERROR` (incl. missing `acceptPolicies`) / `REGISTRATION_REJECTED`, 409 `EMAIL_TAKEN`, 429 |
 | POST | `/auth/login` | public | 200 + cookie | 400, 401 `INVALID_CREDENTIALS`, 429 |
 | POST | `/auth/logout` | public (clears cookie) | 204 | — |
 | GET | `/auth/me` | any signed-in | 200 | 401 |
@@ -101,10 +105,17 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | POST | `/admin/colleges/:id/rotate-join-code` | super_admin | 200 | 400, 401, 403, 404 |
 | POST | `/admin/colleges/:id/tpo-heads` | super_admin | 201 | 400 `VALIDATION_ERROR` / `EMAIL_DOMAIN_MISMATCH`, 401, 403, 404, 409 `EMAIL_TAKEN` |
 | GET | `/admin/colleges/:id/staff` | super_admin | 200 | 401, 403, 404 |
+| POST | `/admin/users/:id/reset-password` | super_admin (target: TPO head) | 200 | 400, 401, 403, 404 |
 | GET | `/college/me` | student, placement_officer, tpo_head | 200 | 401, 403 |
 | GET | `/staff/members` | placement_officer, tpo_head | 200 | 401, 403 |
 | POST | `/staff/officers` | tpo_head | 201 | 400 `VALIDATION_ERROR` / `EMAIL_DOMAIN_MISMATCH`, 401, 403, 409 |
 | PATCH | `/staff/officers/:id/status` | tpo_head | 200 | 400 `VALIDATION_ERROR` / `CANNOT_MODIFY_SELF`, 401, 403 `FORBIDDEN` (target is a TPO head), 404 |
+| POST | `/staff/users/:id/reset-password` | tpo_head (officers, students), placement_officer (students) | 200 | 400 `CANNOT_MODIFY_SELF`, 401, 403 `FORBIDDEN`, 404 |
+| GET | `/staff/students` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| POST | `/staff/students/:id/approve` | placement_officer, tpo_head | 200 | 400, 401, 403, 404, 409 `INVALID_STATUS_CHANGE` |
+| POST | `/staff/students/:id/reject` | placement_officer, tpo_head | 200 | 400, 401, 403, 404, 409 `INVALID_STATUS_CHANGE` |
+| POST | `/staff/students/bulk-approve` | placement_officer, tpo_head | 200 | 400, 401, 403 |
+| PATCH | `/staff/students/:id/status` | placement_officer, tpo_head | 200 | 400, 401, 403, 404, 409 `INVALID_STATUS_CHANGE` |
 | POST | `/cases` | student | 201 | 400 `VALIDATION_ERROR` / `SENSITIVE_ID_DETECTED`, 401, 403, 429 |
 | GET | `/cases/mine` | student | 200 | 400, 401, 403 |
 | GET | `/cases/:id` | student (owner) | 200 | 401, 403, 404 |
@@ -152,22 +163,23 @@ No stack traces are returned in `production` (or `test`). In `development` only,
 | GET | `/staff/stats` | placement_officer, tpo_head | 200 | 400, 401, 403 |
 | GET | `/files/:token` | the user the link was issued to (session required) | 200 (file stream) | 401 `UNAUTHENTICATED` / `LINK_INVALID`, 404 |
 
-Any authenticated route can also return `403 PASSWORD_CHANGE_REQUIRED` (except the three allowed auth routes).
+Any authenticated route can also return `403 PASSWORD_CHANGE_REQUIRED` or `403 ACCOUNT_PENDING_APPROVAL` (except the three allowed auth routes). Every response carries an `X-Request-Id` header.
 
 ### `GET /health`
 
 ```json
-{ "status": "ok", "service": "offershield-api", "version": "0.1.0", "environment": "development",
+{ "status": "ok", "service": "offershield-api", "version": "0.1.0", "commit": null, "environment": "development",
   "uptimeSeconds": 12, "timestamp": "2026-11-10T07:30:00.000Z", "database": "connected" }
 ```
 
-`database` is `"connected"` when the mongoose connection is open, otherwise `"disconnected"`.
+`database` is `"connected"` when the mongoose connection is open, otherwise `"disconnected"`. `commit` is `RENDER_GIT_COMMIT` when set (Phase 7).
 
 ### `POST /auth/register`
 
-Request: `{ "name", "email", "password", "collegeCode", "joinCode", "year": 1-5, "branch" }`
+Request: `{ "name", "email", "password", "collegeCode", "joinCode", "year": 1-5, "branch", "acceptPolicies": true }`
 
-- `email` is lowercased; its domain must be one of the college's `emailDomains`.
+- `email` is lowercased. In `email_domain` colleges its domain must be one of the college's `emailDomains`; in `manual_approval` colleges any valid address is accepted and the user starts as `pending_approval` (staff get a `student_pending` notification).
+- `acceptPolicies` must be `true`; `policiesAcceptedAt` and `policiesVersion` are stored on the user.
 - `collegeCode` is lowercased; the college must be `active`.
 - `joinCode` is compared case-insensitively, ignoring spaces and dashes, against the stored hash.
 - `branch` is uppercased and must be one of the college's branches (otherwise `400 VALIDATION_ERROR`, checked only after the college details are accepted).
@@ -185,7 +197,7 @@ No body. Clears `os_session`; `204`.
 
 ### `GET /auth/me`
 
-`200 { "user": SafeUser, "college": { "id", "name", "code", "branches" } | null }` (`null` for super admin).
+`200 { "user": SafeUser, "college": { "id", "name", "code", "branches", "studentVerification", "isDemo" } | null }` (`null` for super admin). Also works for `pending_approval` users.
 
 ### `POST /auth/change-password`
 
@@ -193,7 +205,7 @@ Request: `{ "currentPassword", "newPassword" }`. The new password must meet the 
 
 ### `POST /admin/colleges`
 
-Request: `{ "name", "code", "emailDomains": ["college.edu"], "branches"?: ["COMP", …] }`
+Request: `{ "name", "code", "emailDomains": ["college.edu"], "branches"?: ["COMP", …], "studentVerification"?: "email_domain" | "manual_approval" }` (`isDemo` is rejected: strict schema)
 
 Response `201`: `{ "college": CollegeView, "studentJoinCode": "K7Q2M9XHRA" }` — a 10-character code from an unambiguous alphabet (no 0/O/1/I/L). **Returned only here and on rotation**; only its hash is stored. Audit: `college.create`.
 
@@ -203,7 +215,7 @@ Response `201`: `{ "college": CollegeView, "studentJoinCode": "K7Q2M9XHRA" }` �
 
 ### `PATCH /admin/colleges/:id`
 
-Request (at least one): `{ "name"?, "emailDomains"?, "branches"?, "status"?: "active" | "suspended" }`. `code` cannot be changed. `200 { "college": CollegeView }`. Suspending a college immediately blocks logins and live sessions of its users. Audit: `college.update` (`metadata.fields`, and `metadata.status` `{from,to}` when it changes).
+Request (at least one): `{ "name"?, "emailDomains"?, "branches"?, "status"?: "active" | "suspended", "studentVerification"? }` (`isDemo` → 400). `code` cannot be changed. `200 { "college": CollegeView }`. Suspending a college immediately blocks logins and live sessions of its users. Audit: `college.update` (`metadata.fields`, and `metadata.status` `{from,to}` when it changes).
 
 ### `POST /admin/colleges/:id/rotate-join-code`
 
@@ -474,6 +486,38 @@ The actor is never notified about their own action. Delivery is in-app only; the
 #### `GET /staff/stats?from=&to=` (placement_officer, tpo_head; default last 90 days)
 
 `{ stats: { range, cases: { byStatus, byChannel, createdPerWeek [8 × { week: 'YYYY-Www', weekStart, count }], openCount, staleOpenCount, unassignedOpenCount }, decisions: { byType, medianHoursToDecision }, money: { casesWithFeeRequested, totalAmountRequested, studentsReportedPaid }, registry: { activeFraudIndicators, verifiedRecruiters, expiredRecruiters, pendingRecruiters }, lookups: { <resultStatus>: count }, advisories: { publishedCount, overallAckRate }, relatedCaseLinks } }`. Range-based: case breakdowns, money, lookups and relatedCaseLinks (by createdAt) and decisions (by decidedAt). Current snapshot: open/stale/unassigned counts, registry and advisories.
+
+### Pilot readiness (Phase 7)
+
+#### `GET /health/ready`
+
+`200 { "status": "ready", "database": "connected" }` or `503 { "status": "unavailable", "database": "disconnected" }`. Use it as the Render health check.
+
+#### `GET /policies`
+
+`200 { "version": "2026-11-12", "retentionMonths": 12, "supportEmail": "…" | null }` for the privacy and terms pages.
+
+#### Students (`/staff/students`, placement_officer and tpo_head, own college only)
+
+- `GET /?status=pending_approval|active|disabled|rejected&year=&branch=&q=&page=&limit≤100` → `{ students: [{ id, name, email, year, branch, status, mustChangePassword, createdAt, lastLoginAt }], page, limit, total, pendingCount }`. `q` matches name or email (regex-escaped).
+- `POST /:id/approve` (empty body) — from `pending_approval` or `rejected` → `active`. `{ student }`. Audit `student.approve`.
+- `POST /:id/reject` `{ reason? ≤ 500 }` — from `pending_approval` → `rejected`, sessions revoked. Audit `student.reject` (`hasReason` only).
+- `POST /bulk-approve` `{ ids: [1–100 ids] }` → `{ approved: [ids], skipped: n }`; ids of other colleges, non-pending or unknown students are skipped. One `student.approve` audit entry per student.
+- `PATCH /:id/status` `{ status: "active" | "disabled" }` — active ↔ disabled only; disabling revokes sessions. Audit `student.status_change`.
+- Another college's id → 404; a staff account id → 404.
+
+#### Password resets
+
+- `POST /staff/users/:id/reset-password` (empty body): tpo_head → placement officers and students; placement_officer → students. `200 { user: StaffSummary, temporaryPassword }` (returned once). Sets `mustChangePassword=true`, increments `tokenVersion`. Self → 400 `CANNOT_MODIFY_SELF`; a role you may not reset (incl. any TPO head) → 403; another college → 404. Audit `user.password_reset { targetRole }`.
+- `POST /admin/users/:id/reset-password` (super_admin): TPO heads only; any other id → 404.
+
+#### Notifications
+
+New type `student_pending` → all active staff, link `/staff/students`, text "New student awaiting approval" (no name or email).
+
+#### Production behaviour
+
+In production the same service serves the client: non-`/api` GETs that accept HTML return `index.html` (`Cache-Control: no-cache`), `/assets/*` are immutable for a year, unknown `/api/*` stay JSON 404.
 
 ## Planned route groups (not implemented)
 

@@ -22,6 +22,8 @@ function toCollegeView(college, staffCount) {
     emailDomains: [...college.emailDomains],
     branches: [...college.branches],
     status: college.status,
+    studentVerification: college.studentVerification ?? 'email_domain',
+    isDemo: Boolean(college.isDemo),
     staffCount,
     createdAt: college.createdAt,
     updatedAt: college.updatedAt,
@@ -130,9 +132,26 @@ async function createTpoHead(actor, collegeId, input, { ip }) {
   return staffService.createStaffAccount({ college, role: ROLES.TPO_HEAD, ...input, actor, ip });
 }
 
+/** The super admin resets TPO heads only; anything else (or a malformed id) is 404. */
+async function resetTpoHeadPassword(actor, userId, { ip }) {
+  if (!mongoose.isValidObjectId(userId)) throw new AppError(404, 'NOT_FOUND', 'User not found');
+  const target = await User.findOne({ _id: userId, role: ROLES.TPO_HEAD }).lean();
+  if (!target) throw new AppError(404, 'NOT_FOUND', 'User not found');
+  return staffService.issueTemporaryPassword(target, actor, { ip });
+}
+
 async function listCollegeStaff(collegeId) {
   const college = await findCollegeOr404(collegeId);
   return staffService.listStaff(college._id);
 }
 
-module.exports = { createCollege, listColleges, getCollege, updateCollege, rotateJoinCode, createTpoHead, listCollegeStaff };
+module.exports = {
+  createCollege,
+  listColleges,
+  getCollege,
+  updateCollege,
+  rotateJoinCode,
+  createTpoHead,
+  listCollegeStaff,
+  resetTpoHeadPassword,
+};

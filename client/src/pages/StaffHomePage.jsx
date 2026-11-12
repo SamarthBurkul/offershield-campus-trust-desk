@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getCaseCounts } from '../api/staffCases.js'
+import { listStudents } from '../api/students.js'
 import { ROLE_LABELS, ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import LookupBox from '../components/LookupBox.jsx'
@@ -22,6 +23,8 @@ export default function StaffHomePage() {
   const isHead = user.role === ROLES.TPO_HEAD
   usePageTitle('Staff home')
   const [counts, setCounts] = useState(null)
+  const [pendingStudents, setPendingStudents] = useState(null)
+  const manualApproval = college?.studentVerification === 'manual_approval'
 
   useEffect(() => {
     let active = true
@@ -32,6 +35,17 @@ export default function StaffHomePage() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!manualApproval) return undefined
+    let active = true
+    listStudents({ status: 'pending_approval', limit: 1 })
+      .then((value) => active && setPendingStudents(value.pendingCount))
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [manualApproval])
 
   return (
     <div className="space-y-6">
@@ -52,6 +66,16 @@ export default function StaffHomePage() {
         ))}
       </div>
 
+      {manualApproval && (
+        <Link
+          to="/staff/students?tab=pending"
+          className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm hover:border-amber-400"
+        >
+          <span className="text-sm font-medium text-amber-900">Students awaiting approval</span>
+          <span className="text-2xl font-bold text-amber-900">{pendingStudents ?? '–'}</span>
+        </Link>
+      )}
+
       <LookupBox staff />
 
       <Card title="Staff desk">
@@ -67,6 +91,12 @@ export default function StaffHomePage() {
               Advisories
             </Link>
             <span className="text-sm text-slate-600"> — warn targeted students about confirmed scams</span>
+          </li>
+          <li>
+            <Link to="/staff/students" className="font-medium text-blue-700 hover:underline">
+              Students
+            </Link>
+            <span className="text-sm text-slate-600"> — approve registrations, reset passwords, disable accounts</span>
           </li>
           <li>
             <Link to="/staff/stats" className="font-medium text-blue-700 hover:underline">

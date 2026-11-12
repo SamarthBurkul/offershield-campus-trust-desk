@@ -24,6 +24,7 @@ function createAdminRouter({ authenticate }) {
   router.post('/colleges/:id/rotate-join-code', validateBody(emptyBodySchema), controller.rotateJoinCode);
   router.post('/colleges/:id/tpo-heads', validateBody(createStaffSchema), controller.createTpoHead);
   router.get('/colleges/:id/staff', controller.listCollegeStaff);
+  router.post('/users/:id/reset-password', validateBody(emptyBodySchema), controller.resetTpoHeadPassword);
 
   return router;
 }

@@ -34,7 +34,7 @@ describe('loadConfig', () => {
     expect(typeof config.port).toBe('number');
     expect(config.clientOrigins).toEqual(['http://localhost:5173', 'https://desk.example.edu']);
     expect(Array.isArray(config.clientOrigins)).toBe(true);
-    expect(config.rateLimit).toEqual({ windowMs: 60000, max: 50 });
+    expect(config.rateLimit).toEqual({ windowMs: 60000, max: 50, userMax: 600 });
   });
 
   it('applies defaults when only the required keys are set', () => {
@@ -46,7 +46,7 @@ describe('loadConfig', () => {
     expect(config.rateLimit.windowMs).toBeGreaterThan(0);
     expect(config.rateLimit.max).toBeGreaterThan(0);
     expect(config.jwtExpiresInSeconds).toBe(8 * 3600);
-    expect(config.authRateLimit).toEqual({ windowMs: 900000, max: 10 });
+    expect(config.authRateLimit).toEqual({ windowMs: 900000, max: 10, ipMax: 200 });
     expect(config.cookieSecure).toBe(false);
   });
 
@@ -58,14 +58,15 @@ describe('loadConfig', () => {
   });
 
   it.each(['development', 'production'])('requires MONGODB_URI and JWT_SECRET in %s', (nodeEnv) => {
-    const err = captureError(() => loadConfig({ NODE_ENV: nodeEnv }));
+    // Production additionally requires CLIENT_ORIGINS (Phase 7); covered in production.test.js.
+    const err = captureError(() => loadConfig({ NODE_ENV: nodeEnv, CLIENT_ORIGINS: 'https://desk.example.edu' }));
 
     expect(err).toBeInstanceOf(ConfigError);
     expect(err.invalidKeys).toEqual(['MONGODB_URI', 'JWT_SECRET']);
   });
 
   it('derives cookieSecure from production and parses JWT_EXPIRES_IN', () => {
-    expect(loadConfig({ NODE_ENV: 'production', ...REQUIRED }).cookieSecure).toBe(true);
+    expect(loadConfig({ NODE_ENV: 'production', CLIENT_ORIGINS: 'https://desk.example.edu', ...REQUIRED }).cookieSecure).toBe(true);
     expect(loadConfig({ ...REQUIRED, JWT_EXPIRES_IN: '30m' }).jwtExpiresInSeconds).toBe(1800);
     expect(captureError(() => loadConfig({ ...REQUIRED, JWT_EXPIRES_IN: 'soon' })).invalidKeys).toEqual(['JWT_EXPIRES_IN']);
   });

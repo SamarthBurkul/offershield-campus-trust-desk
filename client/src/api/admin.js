@@ -37,3 +37,9 @@ export async function listCollegeStaff(id) {
   const { data } = await apiClient.get(`/admin/colleges/${encodeURIComponent(id)}/staff`)
   return data.staff
 }
+
+/** Super admin resets a TPO head. Resolves to { user, temporaryPassword }. */
+export async function resetTpoHeadPassword(userId) {
+  const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/reset-password`, {})
+  return data
+}

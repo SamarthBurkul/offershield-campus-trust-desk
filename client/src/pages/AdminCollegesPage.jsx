@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { createCollege, listColleges } from '../api/admin.js'
 import { errorMessage } from '../api/errors.js'
-import { Button, Card, ErrorAlert, OneTimeSecret, StatusBadge, TextField } from '../components/ui.jsx'
+import { Button, Card, ErrorAlert, OneTimeSecret, SelectField, StatusBadge, TextField } from '../components/ui.jsx'
 import { splitList } from '../utils/lists.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 import Skeleton from '../components/Skeleton.jsx'
@@ -58,7 +58,7 @@ export default function AdminCollegesPage() {
 }
 
 function CreateCollegeCard({ onCreated }) {
-  const [form, setForm] = useState({ name: '', code: '', emailDomains: '', branches: '' })
+  const [form, setForm] = useState({ name: '', code: '', emailDomains: '', branches: '', studentVerification: 'email_domain' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [created, setCreated] = useState(null)
@@ -70,11 +70,11 @@ function CreateCollegeCard({ onCreated }) {
     setError('')
     setSubmitting(true)
     try {
-      const details = { name: form.name, code: form.code, emailDomains: splitList(form.emailDomains) }
+      const details = { name: form.name, code: form.code, emailDomains: splitList(form.emailDomains), studentVerification: form.studentVerification }
       const branches = splitList(form.branches)
       if (branches.length > 0) details.branches = branches
       setCreated(await createCollege(details))
-      setForm({ name: '', code: '', emailDomains: '', branches: '' })
+      setForm({ name: '', code: '', emailDomains: '', branches: '', studentVerification: 'email_domain' })
       onCreated()
     } catch (err) {
       setError(errorMessage(err))
@@ -98,7 +98,12 @@ function CreateCollegeCard({ onCreated }) {
           <TextField label="College code" required hint="Lowercase slug, 3–20 characters, e.g. vjti-mumbai." value={form.code} onChange={update('code')} />
           <TextField label="Email domains" required hint="Comma-separated, e.g. college.edu" value={form.emailDomains} onChange={update('emailDomains')} />
           <TextField label="Branches (optional)" hint="Comma-separated; defaults to COMP, IT, EXTC, MECH, CIVIL, AIDS." value={form.branches} onChange={update('branches')} />
+          <SelectField label="Student verification" value={form.studentVerification} onChange={update('studentVerification')}>
+            <option value="email_domain">College email domain (students self-register)</option>
+            <option value="manual_approval">Manual approval (any email; staff approve each student)</option>
+          </SelectField>
         </div>
+        <p className="text-xs text-slate-500">Email domains are still required: staff accounts always use a college address.</p>
         <ErrorAlert message={error} />
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Creating…' : 'Create college'}

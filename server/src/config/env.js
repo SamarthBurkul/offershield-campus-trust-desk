@@ -40,6 +40,15 @@ const durationSeconds = z
 
 const optionalString = z.string().min(1).optional();
 
+const booleanFlag = (defaultValue) =>
+  z
+    .enum(['true', 'false', '1', '0'])
+    .default(defaultValue ? 'true' : 'false')
+    .transform((value) => value === 'true' || value === '1');
+
+// The placeholder shipped in server/.env.example; a production deployment must replace it.
+const JWT_SECRET_PLACEHOLDER = 'replace-with-a-long-random-secret-of-32-plus-chars';
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -55,18 +64,34 @@ const envSchema = z
       )
       .pipe(z.array(originSchema).min(1, { error: 'must list at least one origin' })),
     API_RATE_LIMIT_WINDOW_MS: positiveInt(15 * 60 * 1000),
+    // Unauthenticated /api traffic, per IP.
     API_RATE_LIMIT_MAX: positiveInt(300),
+    // Authenticated /api traffic, per user (students on one campus Wi-Fi share a public IP).
+    API_USER_RATE_LIMIT_MAX: positiveInt(600),
+    // 0 = do not trust X-Forwarded-For; 1 = one proxy hop (Render). Defaults to 1 in production.
+    TRUST_PROXY: z.coerce.number().int().min(0).max(10).optional(),
     MONGODB_URI: optionalString,
     JWT_SECRET: z.string().min(32, { error: 'must be at least 32 characters' }).optional(),
     JWT_EXPIRES_IN: z.string().default('8h').pipe(durationSeconds),
     AUTH_RATE_LIMIT_WINDOW_MS: positiveInt(15 * 60 * 1000),
+    // Login: per IP + normalised email, and a looser per-IP ceiling (shared campus IPs).
     AUTH_RATE_LIMIT_MAX: positiveInt(10),
+    AUTH_IP_RATE_LIMIT_MAX: positiveInt(200),
+    REGISTER_RATE_LIMIT_WINDOW_MS: positiveInt(60 * 60 * 1000),
+    REGISTER_RATE_LIMIT_MAX: positiveInt(60),
     CASE_CREATE_LIMIT_PER_HOUR: positiveInt(10),
     RECRUITER_VERIFICATION_DAYS: z.coerce.number().int().min(30).max(730).default(365),
     SIMHASH_MAX_DISTANCE: z.coerce.number().int().min(0).max(32).default(6),
     LOOKUP_LIMIT_PER_10MIN: positiveInt(60),
     CASE_STALE_DAYS: z.coerce.number().int().min(1).max(365).default(3),
     EVIDENCE_LINK_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
+    APP_BASE_URL: originSchema.optional(),
+    SUPPORT_EMAIL: z.email({ error: 'must be a valid email address' }).optional(),
+    RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
+    ALLOW_DEMO_SEED: booleanFlag(false),
+    // Development-only escape hatch for a local production smoke on http://localhost; ignored for https.
+    COOKIE_SECURE_OVERRIDE: z.enum(['true', 'false']).optional(),
+    RENDER_GIT_COMMIT: optionalString,
     // Used only by the seed scripts.
     SEED_SUPERADMIN_EMAIL: optionalString,
     SEED_SUPERADMIN_PASSWORD: optionalString,
@@ -79,6 +104,10 @@ const envSchema = z
       if (env[key] === undefined) {
         ctx.addIssue({ code: 'custom', path: [key], message: `is required when NODE_ENV is ${env.NODE_ENV}` });
       }
+    }
+    if (env.NODE_ENV !== 'production') return;
+    if (env.JWT_SECRET === JWT_SECRET_PLACEHOLDER) {
+      ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'must be replaced (it is the .env.example placeholder)' });
     }
   });
 
@@ -97,11 +126,15 @@ class ConfigError extends Error {
  */
 function loadConfig(envObject = {}) {
   const result = envSchema.safeParse(envObject);
+  // CLIENT_ORIGINS has a development default, so "missing" is checked on the raw input.
+  const missingOrigins = envObject.NODE_ENV === 'production' && !String(envObject.CLIENT_ORIGINS ?? '').trim();
 
-  if (!result.success) {
+  if (!result.success || missingOrigins) {
     const details = [];
     const invalidKeys = [];
-    for (const issue of result.error.issues) {
+    const issues = [...(result.success ? [] : result.error.issues)];
+    if (missingOrigins) issues.push({ path: ['CLIENT_ORIGINS'], message: 'is required when NODE_ENV is production' });
+    for (const issue of issues) {
       const key = String(issue.path[0] ?? 'unknown');
       if (!invalidKeys.includes(key)) invalidKeys.push(key);
       const position = issue.path.length > 1 ? ` (entry ${issue.path[1]})` : '';
@@ -112,18 +145,28 @@ function loadConfig(envObject = {}) {
 
   const env = result.data;
   const isProduction = env.NODE_ENV === 'production';
+  const httpsBase = Boolean(env.APP_BASE_URL && env.APP_BASE_URL.startsWith('https://'));
+  // The override can only turn Secure off for a plain-http base URL (local production smoke).
+  const cookieSecure = isProduction && !(env.COOKIE_SECURE_OVERRIDE === 'false' && !httpsBase);
   return Object.freeze({
     nodeEnv: env.NODE_ENV,
     isProduction,
     port: env.PORT,
     clientOrigins: Object.freeze([...env.CLIENT_ORIGINS]),
+    trustProxy: env.TRUST_PROXY ?? (isProduction ? 1 : 0),
     rateLimit: Object.freeze({
       windowMs: env.API_RATE_LIMIT_WINDOW_MS,
       max: env.API_RATE_LIMIT_MAX,
+      userMax: env.API_USER_RATE_LIMIT_MAX,
     }),
     authRateLimit: Object.freeze({
       windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS,
       max: env.AUTH_RATE_LIMIT_MAX,
+      ipMax: env.AUTH_IP_RATE_LIMIT_MAX,
+    }),
+    registerRateLimit: Object.freeze({
+      windowMs: env.REGISTER_RATE_LIMIT_WINDOW_MS,
+      max: env.REGISTER_RATE_LIMIT_MAX,
     }),
     caseCreateLimitPerHour: env.CASE_CREATE_LIMIT_PER_HOUR,
     evidenceLinkTtlSeconds: env.EVIDENCE_LINK_TTL_SECONDS,
@@ -134,7 +177,12 @@ function loadConfig(envObject = {}) {
     mongodbUri: env.MONGODB_URI,
     jwtSecret: env.JWT_SECRET,
     jwtExpiresInSeconds: env.JWT_EXPIRES_IN,
-    cookieSecure: isProduction,
+    cookieSecure,
+    appBaseUrl: env.APP_BASE_URL ?? null,
+    supportEmail: env.SUPPORT_EMAIL ?? null,
+    retentionMonths: env.RETENTION_MONTHS,
+    allowDemoSeed: env.ALLOW_DEMO_SEED,
+    commit: env.RENDER_GIT_COMMIT ?? null,
     seed: Object.freeze({
       superadminEmail: env.SEED_SUPERADMIN_EMAIL,
       superadminPassword: env.SEED_SUPERADMIN_PASSWORD,
@@ -143,7 +191,15 @@ function loadConfig(envObject = {}) {
   });
 }
 
-// Fail fast at startup if the real environment is invalid.
-const config = loadConfig(process.env);
+/**
+ * `node src/server.js --production` (npm start) runs in production without cross-env,
+ * on Windows and Linux alike. The flag wins over a NODE_ENV=development left in a local .env.
+ */
+function resolveEnv(env, argv) {
+  return argv.includes('--production') ? { ...env, NODE_ENV: 'production' } : env;
+}
 
-module.exports = { config, loadConfig, ConfigError };
+// Fail fast at startup if the real environment is invalid.
+const config = loadConfig(resolveEnv(process.env, process.argv));
+
+module.exports = { config, loadConfig, resolveEnv, ConfigError, JWT_SECRET_PLACEHOLDER };

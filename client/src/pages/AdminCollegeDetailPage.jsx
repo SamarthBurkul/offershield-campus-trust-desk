@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { createTpoHead, getCollege, listCollegeStaff, rotateJoinCode, updateCollege } from '../api/admin.js'
+import { createTpoHead, getCollege, listCollegeStaff, resetTpoHeadPassword, rotateJoinCode, updateCollege } from '../api/admin.js'
 import { errorMessage } from '../api/errors.js'
-import { ROLE_LABELS } from '../auth/roles.js'
+import { ROLE_LABELS, ROLES } from '../auth/roles.js'
 import { Button, Card, ErrorAlert, OneTimeSecret, SelectField, StatusBadge, TextField } from '../components/ui.jsx'
 import { splitList } from '../utils/lists.js'
 import Skeleton from '../components/Skeleton.jsx'
@@ -12,6 +12,12 @@ const toForm = (college) => ({
   emailDomains: college.emailDomains.join(', '),
   branches: college.branches.join(', '),
   status: college.status,
+  studentVerification: college.studentVerification ?? 'email_domain',
+})
+
+const VERIFICATION_LABELS = Object.freeze({
+  email_domain: 'College email domain (students self-register)',
+  manual_approval: 'Manual approval (any email; staff approve each student)',
 })
 
 export default function AdminCollegeDetailPage() {
@@ -20,6 +26,8 @@ export default function AdminCollegeDetailPage() {
   const [staff, setStaff] = useState([])
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [secret, setSecret] = useState(null)
+  const [resetError, setResetError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -48,6 +56,16 @@ export default function AdminCollegeDetailPage() {
   }
   if (!college) return <Skeleton rows={4} label="Loading college" />
 
+  async function resetHead(member) {
+    setResetError('')
+    try {
+      const { temporaryPassword } = await resetTpoHeadPassword(member.id)
+      setSecret({ email: member.email, password: temporaryPassword })
+    } catch (err) {
+      setResetError(errorMessage(err))
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -65,6 +83,10 @@ export default function AdminCollegeDetailPage() {
       <CreateTpoHeadCard college={college} onCreated={() => setReloadKey((key) => key + 1)} />
 
       <Card title="Staff">
+        {secret && (
+          <OneTimeSecret label={`Temporary password for ${secret.email}`} value={secret.password} onDismiss={() => setSecret(null)} />
+        )}
+        <ErrorAlert message={resetError} />
         {staff.length === 0 ? (
           <p className="text-slate-600">No staff accounts yet.</p>
         ) : (
@@ -76,6 +98,11 @@ export default function AdminCollegeDetailPage() {
                 </span>
                 <span className="flex items-center gap-2 text-slate-600">
                   {ROLE_LABELS[member.role]} <StatusBadge status={member.status} />
+                  {member.role === ROLES.TPO_HEAD && (
+                    <Button variant="secondary" onClick={() => resetHead(member)}>
+                      Reset password
+                    </Button>
+                  )}
                 </span>
               </li>
             ))}
@@ -105,6 +132,7 @@ function EditCollegeCard({ college, onSaved }) {
         emailDomains: splitList(form.emailDomains),
         branches: splitList(form.branches),
         status: form.status,
+        studentVerification: form.studentVerification,
       })
       setSaved(true)
       onSaved(updated)
@@ -126,6 +154,13 @@ function EditCollegeCard({ college, onSaved }) {
           </SelectField>
           <TextField label="Email domains" hint="Comma-separated" value={form.emailDomains} onChange={update('emailDomains')} />
           <TextField label="Branches" hint="Comma-separated" value={form.branches} onChange={update('branches')} />
+          <SelectField label="Student verification" value={form.studentVerification} onChange={update('studentVerification')}>
+            {Object.entries(VERIFICATION_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </SelectField>
         </div>
         <ErrorAlert message={error} />
         {saved && <p className="text-sm text-emerald-700">Saved.</p>}

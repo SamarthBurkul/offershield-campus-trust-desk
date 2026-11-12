@@ -39,11 +39,13 @@ function createErrorHandler({ nodeEnv }) {
   return function errorHandler(err, req, res, _next) {
     const { status, code, message, details } = classify(err);
 
-    // Log method, path and outcome only - never request bodies or headers.
+    // The request id and error code only: the request line (path, status) is logged by requestLogger,
+    // and URLs, bodies and headers can carry personal data. Stacks are printed only in development.
+    const line = JSON.stringify({ t: new Date().toISOString(), requestId: req.id ?? null, code });
     if (status >= 500) {
-      console.error(`[error] ${req.method} ${req.originalUrl} -> ${status} ${code}\n${err && err.stack}`);
+      console.error(nodeEnv === 'development' && err?.stack ? `${line}\n${err.stack}` : line);
     } else {
-      console.warn(`[warn] ${req.method} ${req.originalUrl} -> ${status} ${code}`);
+      console.warn(line);
     }
 
     const body = { error: { code, message } };

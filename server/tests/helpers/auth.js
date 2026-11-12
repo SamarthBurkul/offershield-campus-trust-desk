@@ -13,12 +13,15 @@ function createTestConfig(overrides = {}) {
     JWT_SECRET: TEST_JWT_SECRET,
     API_RATE_LIMIT_MAX: '100000',
     AUTH_RATE_LIMIT_MAX: '100000',
+    AUTH_IP_RATE_LIMIT_MAX: '100000',
+    API_USER_RATE_LIMIT_MAX: '100000',
+    REGISTER_RATE_LIMIT_MAX: '100000',
     ...overrides,
   });
 }
 
-function createTestApp(overrides) {
-  return createApp(createTestConfig(overrides));
+function createTestApp(overrides, options) {
+  return createApp(createTestConfig(overrides), options);
 }
 
 /** The raw Set-Cookie header for the session cookie, or undefined. */

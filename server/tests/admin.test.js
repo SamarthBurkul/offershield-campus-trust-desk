@@ -38,6 +38,7 @@ function register(joinCode, email = 'kiran@gamma.edu') {
     joinCode,
     year: 2,
     branch: 'IT',
+    acceptPolicies: true,
   });
 }
 

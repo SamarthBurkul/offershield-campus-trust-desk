@@ -16,6 +16,7 @@ describe('GET /api/v1/health', () => {
     expect(res.body).toEqual({
       status: 'ok',
       service: 'offershield-api',
+      commit: null,
       version,
       environment: 'test',
       uptimeSeconds: expect.any(Number),

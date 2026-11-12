@@ -33,4 +33,8 @@ async function listCollegeStaff(req, res) {
   res.status(200).json({ staff: await adminService.listCollegeStaff(req.params.id) });
 }
 
-module.exports = { createCollege, listColleges, getCollege, updateCollege, rotateJoinCode, createTpoHead, listCollegeStaff };
+async function resetTpoHeadPassword(req, res) {
+  res.status(200).json(await adminService.resetTpoHeadPassword(actorOf(req), req.params.id, { ip: req.ip }));
+}
+
+module.exports = { createCollege, listColleges, getCollege, updateCollege, rotateJoinCode, createTpoHead, listCollegeStaff, resetTpoHeadPassword };

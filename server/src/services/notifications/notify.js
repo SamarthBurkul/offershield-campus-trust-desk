@@ -15,7 +15,7 @@ const INTERNAL_LINK = /^\/(?!\/)[A-Za-z0-9/_-]*$/;
  * pass the template `context` (allow-listed fields) and never free text.
  * @param {string} collegeId
  * @param {string[]} userIds recipients; `excludeUserId` (the actor) is always removed
- * @param {{ type: string, context: object, link: string, refType: 'case'|'advisory', refId: any, excludeUserId?: string }} options
+ * @param {{ type: string, context: object, link: string, refType: 'case'|'advisory'|'user', refId: any, excludeUserId?: string }} options
  */
 async function notify(collegeId, userIds, { type, context, link, refType, refId, excludeUserId = null }) {
   if (!INTERNAL_LINK.test(link)) throw new Error('Notification links must be internal paths');

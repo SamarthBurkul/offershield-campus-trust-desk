@@ -53,6 +53,11 @@ const TEMPLATES = Object.freeze({
     title: truncate(`${c.severity === 'critical' ? 'Critical advisory: ' : 'Advisory: '}${c.advisoryTitle}`, 120),
     body: 'Your placement cell published a new advisory. Please read it and confirm you have seen it.',
   }),
+  // No name or email: staff open the Students page to see who is waiting.
+  student_pending: () => ({
+    title: 'New student awaiting approval',
+    body: 'A student registered and is waiting for approval. Review pending students on the Students page.',
+  }),
 });
 
 /** Render a notification's title and body from its template, using only allow-listed context fields. */

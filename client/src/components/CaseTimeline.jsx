@@ -25,6 +25,8 @@ function describe(event, staff) {
       return staff && event.metadata?.type ? `Decision recorded: ${DECISION_TYPE_LABELS[event.metadata.type]}` : 'Decision recorded'
     case 'reopened':
       return 'Request reopened'
+    case 'evidence_purged':
+      return `Evidence deleted under the retention policy (${event.metadata?.count ?? 0} file${event.metadata?.count === 1 ? '' : 's'})`
     case 'linked':
       return `${event.metadata?.action === 'unlink' ? 'Unlinked from' : 'Linked to'} ${event.metadata?.otherCaseNumber ?? 'another case'}`
     default:

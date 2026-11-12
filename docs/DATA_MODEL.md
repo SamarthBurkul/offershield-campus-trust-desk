@@ -23,6 +23,8 @@
 | `branches` | [String] | uppercase; default `COMP, IT, EXTC, MECH, CIVIL, AIDS` |
 | `studentJoinCodeHash` | String | required, bcrypt (cost 12) of the normalised join code, **`select: false`** |
 | `status` | String | `active` \| `suspended`, default `active` |
+| `studentVerification` | String | `email_domain` \| `manual_approval`, default `email_domain` (Phase 7) |
+| `isDemo` | Boolean | default `false`; set only by seed scripts, never accepted by an API (Phase 7) |
 | `createdAt`, `updatedAt` | Date | timestamps |
 
 Indexes: unique `code`.
@@ -36,12 +38,14 @@ Indexes: unique `code`.
 | `name` | String | required, ≤ 120 |
 | `email` | String | required, **unique (platform-wide)**, lowercase, trimmed |
 | `passwordHash` | String | required, bcrypt cost 12, **`select: false`** |
-| `status` | String | `active` \| `disabled`, default `active` |
+| `status` | String | `active` \| `disabled` \| `pending_approval` \| `rejected` (Phase 7), default `active`. Only `active` and `pending_approval` can hold a session |
 | `mustChangePassword` | Boolean | default `false`; `true` for staff created with a temporary password |
 | `tokenVersion` | Number | default 0; incremented on password change and on disable to revoke sessions |
 | `year` | Number | 1–5, **students only** (required for students, forbidden otherwise) |
 | `branch` | String | uppercase, **students only**, must be one of the college's `branches` (pre-validate hook) |
 | `lastLoginAt` | Date | set on login / registration |
+| `policiesAcceptedAt`, `policiesVersion` | Date, String | set at registration from `acceptPolicies` (Phase 7) |
+| `rejectionReason` | String ≤ 500 or null | optional staff-only reason when a pending student is rejected (Phase 7) |
 | `createdAt`, `updatedAt` | Date | timestamps |
 
 Indexes: unique `email`; `{ collegeId: 1, role: 1 }`.
@@ -118,7 +122,7 @@ Indexes: unique `{ collegeId, caseNumber }`; `{ collegeId, status, createdAt: -1
 | Field | Type | Rules |
 | --- | --- | --- |
 | `collegeId`, `caseId` | ObjectId | required |
-| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened, recommendation_made and linked (both always `visibleToStudent=false`) |
+| `type` | String | created, student_message, evidence_added, status_changed, info_requested, staff_message, assigned, decision_recorded, reopened, recommendation_made, linked and evidence_purged (Phase 7) — the last three always `visibleToStudent=false` |
 | `actorId`, `actorRole` | ObjectId, String | who acted |
 | `body` | String or null | ≤ 3000 |
 | `visibleToStudent` | Boolean | **required, no default** — every writer decides explicitly |
@@ -270,14 +274,20 @@ Index `{ collegeId, status, publishedAt: -1 }`. Published advisories are immutab
 | Field | Type | Rules |
 | --- | --- | --- |
 | `collegeId`, `userId` | ObjectId | every query filters both |
-| `type` | String | case_info_requested, case_staff_message, case_decision, case_reopened, case_submitted, case_student_reply, case_assigned, case_recommendation, advisory_published |
+| `type` | String | case_info_requested, case_staff_message, case_decision, case_reopened, case_submitted, case_student_reply, case_assigned, case_recommendation, advisory_published, student_pending (Phase 7) |
 | `title`, `body` | String | ≤ 120 / ≤ 300, rendered only by `services/notifications/templates.js` |
 | `link` | String | internal path (`/…`, never `//` or a URL) |
-| `refType`, `refId` | case or advisory | |
+| `refType`, `refId` | case, advisory or user (Phase 7, `student_pending`) | |
 | `readAt` | Date or null | |
 | `createdAt` | Date | TTL: deleted after 180 days |
 
 Indexes: `{ collegeId, userId, readAt, createdAt: -1 }`; TTL `{ createdAt: 1 }` with `expireAfterSeconds` = 15 552 000.
+
+## Changed in Phase 7
+
+- `colleges`: `studentVerification`, `isDemo`. `users`: statuses `pending_approval` and `rejected`, `policiesAcceptedAt`, `policiesVersion`, `rejectionReason`. `notifications`: type `student_pending`, refType `user`.
+- `caseevents`: new type `evidence_purged` (always `visibleToStudent=false`, `actorRole: "system"`, `metadata { count, retentionMonths }`), written by `ops:retention`.
+- No new collections and no new indexes. Existing documents need no migration: missing `studentVerification` reads as `email_domain`, missing `isDemo` as `false`, and users created before Phase 7 simply have no recorded policy acceptance. `seed:demo` sets `isDemo: true` on existing `demo-alpha` / `demo-beta`.
 
 ## Planned collections
 

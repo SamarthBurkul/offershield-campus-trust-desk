@@ -1,8 +1,20 @@
 'use strict';
 
-const { config } = require('./config/env');
+let config;
+try {
+  ({ config } = require('./config/env'));
+} catch (err) {
+  // Refuse to start on invalid configuration. The message names keys and rules, never values.
+  if (err && err.name === 'ConfigError') {
+    console.error(`[server] refusing to start: ${err.message}`);
+    process.exit(1);
+  }
+  throw err;
+}
 const { connectDB, disconnectDB } = require('./config/db');
 const { app } = require('./app');
+
+const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 async function start() {
   try {
@@ -18,11 +30,20 @@ async function start() {
     console.log(`[server] offershield-api listening on port ${config.port} (${config.nodeEnv})`);
   });
 
+  let stopping = false;
   function shutdown(signal) {
+    if (stopping) return;
+    stopping = true;
     console.log(`[server] ${signal} received, closing HTTP server`);
+    // Stop accepting connections, let in-flight requests finish, then release the database.
     server.close(() => {
-      disconnectDB().finally(() => process.exit(0));
+      disconnectDB()
+        .catch(() => {})
+        .finally(() => process.exit(0));
     });
+    server.closeIdleConnections?.();
+    // Keep-alive or stuck requests must not block a platform restart forever.
+    setTimeout(() => process.exit(1), SHUTDOWN_TIMEOUT_MS).unref();
   }
 
   process.on('SIGINT', () => shutdown('SIGINT'));

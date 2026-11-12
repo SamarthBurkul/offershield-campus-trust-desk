@@ -3,12 +3,14 @@
 const mongoose = require('mongoose');
 const AppError = require('../utils/AppError');
 const { College } = require('../models/College');
-const { User, ROLES } = require('../models/User');
+const { User, ROLES, SESSION_STATUSES } = require('../models/User');
 const { userRepository } = require('../repositories');
 const { hashPassword, verifyPassword, verifyAgainstDummy } = require('../utils/password');
 const { normalizeJoinCode } = require('../utils/tokens');
 const { toSafeUser, idOf } = require('../utils/safeUser');
 const audit = require('./audit.service');
+const notifications = require('./notifications/notify');
+const { POLICIES_VERSION } = require('../constants/policies');
 
 const invalidCredentials = () => new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
 const registrationRejected = () =>
@@ -44,8 +46,12 @@ async function register(input, { ip }) {
     ? await verifyPassword(joinCode, college.studentJoinCodeHash)
     : await verifyAgainstDummy(joinCode);
   const domain = input.email.split('@')[1];
+  const manualApproval = college?.studentVerification === 'manual_approval';
 
-  if (!college || !joinCodeMatches || !college.emailDomains.includes(domain)) throw registrationRejected();
+  // Colleges without student email addresses accept any address; staff then approve each student.
+  if (!college || !joinCodeMatches || (!manualApproval && !college.emailDomains.includes(domain))) {
+    throw registrationRejected();
+  }
   if (!college.branches.includes(input.branch)) {
     throw new AppError(400, 'VALIDATION_ERROR', 'Invalid request: branch: is not offered by this college');
   }
@@ -61,7 +67,10 @@ async function register(input, { ip }) {
       year: input.year,
       branch: input.branch,
       mustChangePassword: false,
+      status: manualApproval ? 'pending_approval' : 'active',
       lastLoginAt: new Date(),
+      policiesAcceptedAt: new Date(),
+      policiesVersion: POLICIES_VERSION,
     });
   } catch (err) {
     if (isDuplicateKey(err)) throw emailTaken();
@@ -74,9 +83,20 @@ async function register(input, { ip }) {
     action: 'auth.register',
     entityType: 'user',
     entityId: user._id,
-    metadata: { year: user.year, branch: user.branch },
+    metadata: { year: user.year, branch: user.branch, status: user.status, policiesVersion: POLICIES_VERSION },
     ip,
   });
+
+  if (manualApproval) {
+    // Template text only: no name or email in the notification.
+    await notifications.notifySafely(college._id, await notifications.activeStaffIds(college._id), {
+      type: 'student_pending',
+      context: {},
+      link: '/staff/students',
+      refType: 'user',
+      refId: user._id,
+    });
+  }
 
   return { user: toSafeUser(user), session: sessionClaims(user) };
 }
@@ -85,8 +105,9 @@ async function login({ email, password }) {
   const user = await User.findOne({ email }).select('+passwordHash');
   const passwordMatches = user ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password);
 
-  // Unknown email, wrong password, disabled account and suspended college look identical.
-  if (!user || !passwordMatches || user.status !== 'active') throw invalidCredentials();
+  // Unknown email, wrong password, disabled or rejected account and suspended college look identical.
+  // A pending student may sign in, but only reaches the "waiting for approval" page.
+  if (!user || !passwordMatches || !SESSION_STATUSES.includes(user.status)) throw invalidCredentials();
   if (user.collegeId && !(await isCollegeActive(user.collegeId))) throw invalidCredentials();
 
   user.lastLoginAt = new Date();
@@ -102,16 +123,23 @@ async function login({ email, password }) {
 async function resolveSessionUser(claims) {
   if (!claims || !mongoose.isValidObjectId(claims.sub)) return null;
   const user = await User.findById(claims.sub).lean();
-  if (!user || user.status !== 'active' || user.tokenVersion !== claims.tv) return null;
+  if (!user || !SESSION_STATUSES.includes(user.status) || user.tokenVersion !== claims.tv) return null;
   if (user.collegeId && !(await isCollegeActive(user.collegeId))) return null;
   return toSafeUser(user);
 }
 
 async function getCollegeSummary(collegeId) {
   if (!collegeId) return null;
-  const college = await College.findById(collegeId).select('name code branches').lean();
+  const college = await College.findById(collegeId).select('name code branches studentVerification isDemo').lean();
   if (!college) return null;
-  return { id: idOf(college._id), name: college.name, code: college.code, branches: college.branches };
+  return {
+    id: idOf(college._id),
+    name: college.name,
+    code: college.code,
+    branches: college.branches,
+    studentVerification: college.studentVerification ?? 'email_domain',
+    isDemo: Boolean(college.isDemo),
+  };
 }
 
 async function getCurrentSession(sessionUser) {

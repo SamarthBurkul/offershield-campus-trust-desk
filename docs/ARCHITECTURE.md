@@ -6,7 +6,7 @@ npm workspaces with two packages:
 
 | Package | Stack | Purpose |
 | --- | --- | --- |
-| `server/` | Node.js 20+, Express 5, CommonJS, Mongoose 9 | REST API under `/api/v1` |
+| `server/` | Node.js 20+ (22 in production, `.node-version`), Express 5, CommonJS, Mongoose 9 | REST API under `/api/v1`; in production also serves the built client |
 | `client/` | React 19, Vite, Tailwind CSS v4, React Router, axios | Browser UI |
 
 The root `package.json` only orchestrates (`dev`, `test`, `build`, `lint`) and holds `concurrently`. Each package owns its dependencies.
@@ -16,38 +16,43 @@ The root `package.json` only orchestrates (`dev`, `test`, `build`, `lint`) and h
 Middleware order, as implemented:
 
 ```
-helmet → cors → express.json (100kb) → cookieParser → rate limit (/api)
+requestId → requestLogger → helmet (CSP, HSTS in prod) → compression → cors → express.json (100kb)
+  → cookieParser → rate limit (/api: per user when the cookie verifies, else per IP)
   → [/api/v1 router]
-      → authRateLimiter (login, register only)
-      → authenticate → enforcePasswordChange → requireRole / requireTenant
+      → login limiters (IP + email, IP) / register limiter (IP)
+      → authenticate → enforcePasswordChange (→ enforceApproved) → requireRole / requireTenant
       → validators (zod .strict())
       → controller → service → tenant repository → model
+  → [production only] client router (client/dist, SPA fallback)
   → notFound → errorHandler
 ```
 
 `server/src/app.js` builds the app in this order:
 
-1. `app.disable('x-powered-by')`
-2. `helmet()` — security headers
-3. `cors()` — allow-list from `CLIENT_ORIGINS`, `credentials: true`
-4. `express.json({ limit: '100kb' })`
-5. `cookieParser()`
-6. Baseline rate limiter on `/api`
-7. `createApiRouter(config)` at `/api/v1` — each feature router applies, per route or router:
-   - `authRateLimiter` on `POST /auth/login` and `POST /auth/register`
-   - `authenticate` (verify JWT cookie, reload the user, set `req.user`)
-   - `enforcePasswordChange` (temporary-password allow-list)
+1. `app.disable('x-powered-by')`, `app.set('trust proxy', TRUST_PROXY)`
+2. `requestId` (`X-Request-Id`) and `requestLogger` (one JSON line per request, no query strings; off in tests unless a sink is passed)
+3. `helmet()` — explicit CSP; HSTS in production
+4. `compression()`
+5. `cors()` — allow-list from `CLIENT_ORIGINS`, `credentials: true`
+6. `express.json({ limit: '100kb' })`
+7. `cookieParser()`
+8. Baseline rate limiter on `/api` (user-keyed when the session JWT verifies, IP-keyed otherwise)
+9. `createApiRouter(config)` at `/api/v1` — each feature router applies, per route or router:
+   - login limiters (`POST /auth/login`) and the register limiter (`POST /auth/register`)
+   - `authenticate` (verify JWT cookie, reload the user, set `req.user`; `active` and `pending_approval` users only)
+   - `enforcePasswordChange` (temporary-password allow-list, then `enforceApproved` for pending students)
    - `requireRole(...)` and/or `requireTenant` (sets `req.tenant = { collegeId }` from `req.user`)
    - `validateBody(schema)`
    - controller
-8. `notFound` — 404 envelope
-9. `errorHandler` — maps errors to the standard envelope
+10. Production only: `createClientRouter(client/dist)` — immutable `/assets`, `no-cache` index.html, SPA fallback for non-`/api` HTML GETs
+11. `notFound` — 404 envelope
+12. `errorHandler` — maps errors to the standard envelope; logs `{ requestId, code }` only
 
-Routers are built per app instance (`createApp(config)`), so tests can create apps with their own secret and rate limits. `app.js` never listens and never connects to MongoDB; `server.js` calls `connectDB(MONGODB_URI)` first, exits with code 1 (URI not printed) on failure, then listens.
+Routers are built per app instance (`createApp(config)`), so tests can create apps with their own secret and rate limits. `app.js` never listens and never connects to MongoDB; `server.js` refuses to start on invalid configuration (exit 1, keys only), calls `connectDB(MONGODB_URI)`, exits with code 1 (URI not printed) on failure, then listens. SIGTERM/SIGINT stop accepting connections, close the server, disconnect MongoDB (forced exit after 10 s).
 
 | Router | Router-level middleware |
 | --- | --- |
-| `/health` | none |
+| `/health`, `/health/ready`, `/policies` | none |
 | `/auth` | per route: limiter + validator (`register`, `login`); none (`logout`); `authenticate`, `enforcePasswordChange` (`me`, `change-password`) |
 | `/admin` | `authenticate`, `enforcePasswordChange`, `requireRole('super_admin')` |
 | `/college` | `authenticate`, `enforcePasswordChange`, `requireTenant` |
@@ -58,6 +63,7 @@ Routers are built per app instance (`createApp(config)`), so tests can create ap
 | `/staff/registry` | inherits `/staff`, then `requireRole('placement_officer', 'tpo_head')`; approve/renew/suspend/revoke add `requireRole('tpo_head')` |
 | `/lookup` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student', 'placement_officer', 'tpo_head')`, per-user `lookupRateLimiter`, `validateQuery` |
 | `/staff/advisories`, `/staff/stats` | inherit `/staff`, then `requireRole('placement_officer', 'tpo_head')`; publish/withdraw add `requireRole('tpo_head')` |
+| `/staff/students`, `/staff/users/:id/reset-password` | inherit `/staff`, then `requireRole('placement_officer', 'tpo_head')`; who may reset whom is checked in `staff.service` |
 | `/advisories` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student')` |
 | `/notifications` | `authenticate`, `enforcePasswordChange`, `requireTenant`, `requireRole('student', 'placement_officer', 'tpo_head')` |
 | `/files` | `authenticate`, `enforcePasswordChange`; the controller verifies the link token against the session user |
@@ -155,12 +161,22 @@ All boxes are scoped to one college; nothing crosses tenants and nothing calls t
 
 ## Configuration
 
-`server/src/config/env.js` loads `server/.env` via dotenv (skipped when `NODE_ENV=test`), validates it with zod and exports a frozen config. It is the only server module that reads `process.env` (ESLint rule). `MONGODB_URI` and `JWT_SECRET` are required in development and production.
+`server/src/config/env.js` loads `server/.env` via dotenv (skipped when `NODE_ENV=test`), validates it with zod and exports a frozen config. It is the only server module that reads `process.env` (ESLint rule). `MONGODB_URI` and `JWT_SECRET` are required in development and production; production also requires `CLIENT_ORIGINS` and rejects the `.env.example` JWT placeholder. `node src/server.js --production` (`npm start`) forces `NODE_ENV=production` without `cross-env`. See [DEPLOYMENT.md](DEPLOYMENT.md) for every variable.
 
 ## Development proxy and cookie strategy
 
 - The Vite dev server (5173) proxies `/api` to `http://localhost:5000`, so the browser sees the API as same-origin and the `SameSite=Lax` cookie just works.
-- Production (Phase 7, ADR-015): one Render web service serves both the built client and the API from one origin.
+- Production (ADR-015, ADR-045): one Render web service serves both the built client and the API from one origin, so the same cookie strategy applies. The client's axios layer shows a "Starting the server" banner while any request is pending longer than 5 s (free-plan cold start).
+
+## Operations scripts
+
+| Script | Purpose |
+| --- | --- |
+| `seed:superadmin`, `seed:demo` | Super admin; small demo colleges `demo-alpha` / `demo-beta` (`isDemo`) |
+| `seed:showcase [--reset]` | Realistic `demo-campus` college built through the services and backdated; `--reset` wipes and rebuilds every `isDemo` college |
+| `ops:retention [--apply]` | Evidence retention (`RETENTION_MONTHS`) |
+
+Shared helpers live in `server/scripts/lib/` (data, generated demo files, reset, retention, guards), so tests can drive them against the memory server.
 
 ## Diagram
 

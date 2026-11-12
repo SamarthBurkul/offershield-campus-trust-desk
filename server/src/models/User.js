@@ -11,7 +11,9 @@ const ROLES = Object.freeze({
 });
 const ROLE_VALUES = Object.freeze(Object.values(ROLES));
 const STAFF_ROLES = Object.freeze([ROLES.TPO_HEAD, ROLES.PLACEMENT_OFFICER]);
-const USER_STATUSES = Object.freeze(['active', 'disabled']);
+const USER_STATUSES = Object.freeze(['active', 'disabled', 'pending_approval', 'rejected']);
+// Statuses that may hold a session: pending students can sign in but only reach /auth/me, logout and change-password.
+const SESSION_STATUSES = Object.freeze(['active', 'pending_approval']);
 
 const userSchema = new mongoose.Schema(
   {
@@ -26,6 +28,9 @@ const userSchema = new mongoose.Schema(
     year: { type: Number, min: 1, max: 5, default: undefined },
     branch: { type: String, trim: true, uppercase: true, default: undefined },
     lastLoginAt: { type: Date, default: null },
+    policiesAcceptedAt: { type: Date, default: null },
+    policiesVersion: { type: String, maxlength: 20, default: null },
+    rejectionReason: { type: String, maxlength: 500, default: null },
   },
   { timestamps: true },
 );
@@ -58,4 +63,4 @@ userSchema.pre('validate', async function enforceTenancyRules() {
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
-module.exports = { User, ROLES, ROLE_VALUES, STAFF_ROLES, USER_STATUSES };
+module.exports = { User, ROLES, ROLE_VALUES, STAFF_ROLES, USER_STATUSES, SESSION_STATUSES };

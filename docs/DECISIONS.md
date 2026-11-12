@@ -89,6 +89,7 @@
 - **Context:** The session uses an httpOnly `SameSite=Lax` cookie. A separately hosted client would make API calls cross-site, requiring `SameSite=None`, CSRF tokens and stricter CORS.
 - **Decision:** In Phase 7, deploy one Render web service: Express serves the built client (`client/dist`) and the API under `/api/v1` from the same origin. `trust proxy` and a shared rate-limit store are configured then.
 - **Consequence:** Cookies stay same-origin in production as they are in development (Vite proxy). The API remains CORS-restricted for any other origin.
+- **Update (Phase 7):** Implemented as ADR-045 with `TRUST_PROXY`. A shared rate-limit store was not added: the pilot runs one instance, so in-memory counters suffice (ADR-042).
 
 ## ADR-016: Planned evidence storage in MongoDB GridFS (Phase 3)
 
@@ -245,3 +246,45 @@
 - **Context:** Notifications are transient pointers to cases and advisories, which keep the durable record (events, audit log).
 - **Decision:** A MongoDB TTL index deletes notifications 180 days after creation.
 - **Consequence:** The inbox stays small; nothing of record is lost. Older items simply disappear from the bell.
+
+## ADR-042: User-keyed rate limiting for shared campus IPs
+
+- **Context:** Hundreds of students can sit behind one campus NAT address; the Phase 2 per-IP limits (300 / 15 min, 10 login attempts / 15 min shared with registration) would block a whole college at exam-result or placement-drive time.
+- **Decision:** The global `/api` limiter keys signed-in traffic by the user id from a verified session JWT (signature and expiry only, no database read) with its own budget (600 / 15 min), and anonymous traffic by IP (300 / 15 min). Login is limited per IP + normalised email (10 / 15 min, stops guessing one account) plus a loose per-IP ceiling (200 / 15 min); registration per IP (60 / hour). `TRUST_PROXY` (1 in production) makes `req.ip` the real client behind Render's proxy. All values are configurable.
+- **Consequence:** Fair limits for shared IPs; an attacker on that same IP can still try ~200 logins per 15 minutes across many emails, each email at most 10. Counters live in process memory (one instance; reset on restart).
+
+## ADR-043: Manual-approval mode for colleges without student email addresses
+
+- **Context:** Some colleges do not issue student email addresses, so the email-domain check (ADR-012) cannot apply.
+- **Decision:** `College.studentVerification = 'manual_approval'`: any valid email can register with the college and join codes, the account is `pending_approval`, and a placement officer or TPO head approves or rejects it. Pending users can sign in but every route except `/auth/me`, logout and change-password returns `403 ACCOUNT_PENDING_APPROVAL` (applied centrally next to the temporary-password gate). Staff are notified with a template that carries no identity.
+- **Consequence:** Works without email infrastructure; adds a manual step for staff (bulk approve helps). Approval relies on staff checking names against their enrolment list.
+
+## ADR-044: Staff-assisted password reset instead of email
+
+- **Context:** The MVP sends no email or SMS (no provider, no domain reputation, no cost), but users forget passwords.
+- **Decision:** Staff reset passwords and hand over a one-time temporary password in person or by phone: TPO heads reset officers and students, officers reset students, the super admin resets TPO heads. The reset forces a password change at next sign-in and revokes every session; the audit entry stores only the target role.
+- **Consequence:** No external dependency and no reset-token attack surface; it needs a human in the loop and relies on staff confirming who is asking. Email reset can be added later.
+
+## ADR-045: Express serves the built client in production
+
+- **Context:** ADR-015 planned one Render web service. Serving the client from the API keeps one origin (cookies stay `SameSite=Lax`, no CORS in production) and one free service.
+- **Decision:** In production the API serves `client/dist`: hashed `/assets/*` immutable for a year, `index.html` `no-cache`, SPA fallback for non-`/api` GETs that accept HTML, JSON 404 for unknown `/api/*`. Helmet sends a strict CSP (all environments) and HSTS (production). `compression` is the only new dependency (justified: assets and JSON compress 3–5×; no built-in alternative in Express). `npm start` runs `node src/server.js --production`, which sets production mode without `cross-env`.
+- **Consequence:** One deploy, one URL, no CDN. The free plan's cold start delays the first page load (the client shows a waking-server notice after 5 s). A CDN can be added later without code changes.
+
+## ADR-046: Demo isolation with `College.isDemo`
+
+- **Context:** Demos and reviews need a realistic, resettable dataset, and a reset must never touch a real college.
+- **Decision:** Seed scripts set `isDemo: true` (no API can set it). `seed:showcase --reset` deletes everything whose `collegeId` belongs to an `isDemo` college, in every collection (native driver, so the append-only audit and note guards are bypassed only here), including GridFS files, then rebuilds the showcase and the alpha/beta colleges. Showcase activity is produced through the real services and then backdated; all scam contacts are fictional. Seeds refuse to run in production unless `ALLOW_DEMO_SEED=true`. Users of demo colleges see a "Demo environment — sample data" banner.
+- **Consequence:** A one-command, repeatable demo. Demo audit trails are disposable by design; real colleges' audit logs stay append-only.
+
+## ADR-047: Evidence retention script
+
+- **Context:** Evidence screenshots and PDFs are the most sensitive data and are rarely needed after a case is closed; Atlas M0 storage is small.
+- **Decision:** `ops:retention` (dry run by default, `--apply` to delete) removes evidence files and records of cases decided more than `RETENTION_MONTHS` (default 12) ago. Cases, decisions, events and audit entries are kept; each purge adds a staff-only `evidence_purged` event and an `evidence.purged` audit entry. It is run by hand (no scheduler on the free plan) and the period is shown on the privacy notice.
+- **Consequence:** Bounded storage and exposure; staff lose the original files of old cases (the written record remains).
+
+## ADR-048: Consent recorded at registration
+
+- **Context:** A pilot needs a clear privacy notice and terms, and proof that students accepted them.
+- **Decision:** `/privacy` and `/terms` describe the actual system; registration requires `acceptPolicies: true` and stores `policiesAcceptedAt` and `policiesVersion` (`constants/policies.js`, mirrored in the client). There is no re-acceptance flow yet: a material change bumps the version and the placement cell informs students.
+- **Consequence:** Simple, auditable consent for new users; existing accounts created before Phase 7 have no recorded acceptance.

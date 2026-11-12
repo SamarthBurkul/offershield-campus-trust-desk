@@ -12,6 +12,8 @@ const registerSchema = z
     joinCode: z.string().trim().min(1, { error: 'is required' }).max(64),
     year: z.number().int().min(1).max(5),
     branch: branchSchema,
+    // Consent to the privacy notice and terms is required; the accepted version is stored on the user.
+    acceptPolicies: z.literal(true, { error: 'You must accept the privacy notice and terms' }),
   })
   .strict();
 

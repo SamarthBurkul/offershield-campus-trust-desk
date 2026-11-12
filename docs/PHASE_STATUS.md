@@ -7,12 +7,47 @@
 | 3 | Student verification requests, evidence (GridFS), indicator extraction | **Passed (architect-reviewed 2026-11-10)** |
 | 4 | TPO investigation desk, decisions, audit trail | **Passed (architect-reviewed 2026-11-10)** |
 | 5 | Registry, lookup, look-alike detection, related-case linking, warning signals | **Passed (architect-reviewed 2026-11-11)** |
-| 6 | Advisories, notifications, stats, UI polish | **Implemented — awaiting architect review** |
-| 7 | Security test suite, deployment (one Render web service), docs | Not started |
+| 6 | Advisories, notifications, stats, UI polish | **Passed (architect-reviewed and user-tested 2026-11-12)** |
+| 7 | Pilot readiness: dialog focus fix, manual-approval students, staff-assisted resets, fair rate limits, privacy/terms with consent, production single service, showcase demo college, ops scripts, deployment and user docs | **Implemented — awaiting architect review** |
+| 8 | Full visual redesign | Not started |
+
+## Phase 7 — details
+
+**Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- Dialog focus bug fixed at the root (`ConfirmDialog` re-focused Cancel whenever its `onCancel` prop changed, i.e. on every keystroke in parents that pass an inline handler); regression tests type 40+ characters into every dialog field.
+- Per-college `studentVerification` (`email_domain` | `manual_approval`), `pending_approval` / `rejected` users, central `ACCOUNT_PENDING_APPROVAL` gate, staff Students API and page (tabs, search, filters, approve, reject, bulk approve, disable/enable), `student_pending` notification, pending count on the staff home.
+- Staff-assisted password resets (head → officers and students, officer → students, super admin → heads) with one-time temporary passwords; "Forgot password?" explanation on the login page.
+- Fair rate limits: per user when signed in, per IP + email and per IP at login, per IP at registration; `TRUST_PROXY`.
+- Production mode: Express serves `client/dist` (immutable assets, no-cache index, SPA fallback), strict CSP + HSTS, compression, startup validation, JSON request logs with `X-Request-Id`, `/health/ready`, graceful shutdown, `npm start` with `--production`, `.node-version` 22, waking-server banner.
+- Privacy and terms pages from `GET /policies`, consent required and stored at registration.
+- `seed:showcase [--reset]` (demo-campus, `isDemo`), `seed:demo` marks alpha/beta `isDemo`, demo banner, `ops:retention [--apply]`.
+- Docs: DEPLOYMENT, OPERATIONS, GUIDE_PLACEMENT_CELL, GUIDE_STUDENT, SECURITY_CHECKLIST; ADR-042 to ADR-048.
+
+### Tests executed (2026-11-12, Node v22.13.1, MongoDB 8.2.6 in memory)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm install` | up to date (one new dependency: `compression` 1.8.2) | 0 |
+| `npm run test:server` | Test Suites: 36 passed, 36 total; Tests: 396 passed, 396 total (final run, inside `npm test`) | 0 |
+| `npm run test:client` | Test Files 13 passed (13); Tests 65 passed (65) | 0 |
+| `npm test` | 396 server + 65 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | `client/dist` (JS 485 kB, 143 kB gzip) | 0 |
+| `npm audit --omit=dev` | found 0 vulnerabilities | 0 |
+| `npm run seed:showcase -w server` / `-- --reset` | against the configured Atlas database: built in 34 s; reset removed only `demo-campus` and rebuilt it | 0 |
+| Production smoke | `node src/server.js --production` on port 5050 against Atlas, headless Chrome: steps 1–8 behaved as specified (port 5000 was in use by another local server) | — |
+
+### Limitations
+
+- Rate-limit counters are in memory (one instance); the retention script runs by hand; no email or SMS of any kind.
+- Students registered before Phase 7 have no recorded policy acceptance; there is no re-acceptance flow yet.
 
 ## Phase 6 — details
 
-**Status:** Implemented — awaiting architect review (not yet passed).
+**Status:** Passed (architect-reviewed and user-tested 2026-11-12).
 
 ### Implemented
 

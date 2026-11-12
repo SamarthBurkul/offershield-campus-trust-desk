@@ -21,6 +21,10 @@ export default function ProtectedRoute({ allowedRoles }) {
   if (user.mustChangePassword && location.pathname !== '/change-password') {
     return <Navigate to="/change-password" replace />
   }
+  // Students of a manual-approval college wait here until staff approve the account.
+  if (user.status === 'pending_approval' && location.pathname !== '/pending-approval') {
+    return <Navigate to="/pending-approval" replace />
+  }
   if (allowedRoles && !allowedRoles.includes(user.role)) return <ForbiddenPage />
 
   return <Outlet />

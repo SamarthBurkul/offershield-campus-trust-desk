@@ -9,15 +9,18 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node src/server.js --production",
     "dev": "nodemon src/server.js",
     "test": "jest",
     "lint": "eslint .",
     "seed:superadmin": "node scripts/seed-superadmin.js",
-    "seed:demo": "node scripts/seed-demo.js"
+    "seed:demo": "node scripts/seed-demo.js",
+    "seed:showcase": "node scripts/seed-showcase.js",
+    "ops:retention": "node scripts/ops-retention.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.10",

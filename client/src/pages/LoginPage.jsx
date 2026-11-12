@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
 
   if (!loading && user && !submitting) return <Navigate to={homePathForRole(user.role)} replace />
 
@@ -54,11 +55,22 @@ export default function LoginPage() {
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
+        <div className="space-y-2 text-sm">
+          <button
+            type="button"
+            className="font-medium text-blue-700 hover:underline"
+            aria-expanded={showForgot}
+            onClick={() => setShowForgot((value) => !value)}
+          >
+            Forgot password?
+          </button>
+          {showForgot && <p className="text-slate-700">Ask your placement cell to reset it. They will give you a temporary password.</p>}
+        </div>
       </Card>
       <p className="text-sm text-slate-600">
         Student without an account?{' '}
         <Link to="/register" className="font-medium text-blue-700 hover:underline">
-          Register with your college email
+          Register as a student
         </Link>
       </p>
     </div>

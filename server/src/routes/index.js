@@ -12,6 +12,7 @@ const { createLookupRouter } = require('./lookup.routes');
 const { createStudentAdvisoryRouter } = require('./advisory.routes');
 const { createNotificationRouter } = require('./notification.routes');
 const { createAuthenticate } = require('../middleware/authenticate');
+const { createPoliciesHandler } = require('../controllers/health.controller');
 
 /**
  * The /api/v1 router (mounted by app.js). Built per app so each app instance
@@ -22,6 +23,7 @@ function createApiRouter(config) {
   const deps = { config, authenticate: createAuthenticate(config) };
 
   router.use('/health', healthRoutes);
+  router.get('/policies', createPoliciesHandler(config));
   router.use('/auth', createAuthRouter(deps));
   router.use('/admin', createAdminRouter(deps));
   router.use('/college', createCollegeRouter(deps));

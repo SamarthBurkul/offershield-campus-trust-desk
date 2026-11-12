@@ -68,6 +68,7 @@ const CASE_EVENT_TYPES = Object.freeze([
   'reopened',
   'recommendation_made',
   'linked',
+  'evidence_purged',
 ]);
 
 const SIGNAL_SEVERITIES = Object.freeze(['info', 'warning', 'high']);

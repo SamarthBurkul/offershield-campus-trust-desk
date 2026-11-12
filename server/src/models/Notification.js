@@ -14,6 +14,7 @@ const NOTIFICATION_TYPES = Object.freeze([
   'case_assigned',
   'case_recommendation',
   'advisory_published',
+  'student_pending',
 ]);
 
 const NOTIFICATION_TTL_SECONDS = 180 * 24 * 60 * 60;
@@ -28,7 +29,7 @@ const notificationSchema = new mongoose.Schema(
     body: { type: String, required: true, maxlength: 300 },
     // Internal app path only (never an absolute or protocol-relative URL).
     link: { type: String, required: true, maxlength: 200, match: /^\/(?!\/)[A-Za-z0-9/_-]*$/ },
-    refType: { type: String, enum: ['case', 'advisory'], required: true },
+    refType: { type: String, enum: ['case', 'advisory', 'user'], required: true },
     refId: { type: ObjectId, required: true },
     readAt: { type: Date, default: null },
   },

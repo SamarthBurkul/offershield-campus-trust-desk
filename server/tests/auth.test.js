@@ -28,6 +28,7 @@ function registration(overrides = {}) {
     joinCode: 'TESTJOIN42',
     year: 3,
     branch: 'COMP',
+    acceptPolicies: true,
     ...overrides,
   };
 }
@@ -218,7 +219,14 @@ describe('GET /auth/me', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.user).toMatchObject({ email: 'student@alpha.test.edu', role: 'student' });
-    expect(res.body.college).toEqual({ id: expect.any(String), name: 'alpha College', code: 'alpha', branches: expect.any(Array) });
+    expect(res.body.college).toEqual({
+      id: expect.any(String),
+      name: 'alpha College',
+      code: 'alpha',
+      branches: expect.any(Array),
+      studentVerification: 'email_domain',
+      isDemo: false,
+    });
   });
 });
 
@@ -309,7 +317,9 @@ describe('auth rate limiter', () => {
 
     expect(limited.status).toBe(429);
     expect(limited.body).toEqual({ error: { code: 'RATE_LIMITED', message: 'Too many attempts, please try again later' } });
-    // Registration shares the strict limiter.
-    expect((await request(limitedApp).post('/api/v1/auth/register').send({})).status).toBe(429);
+    // Registration has its own per-IP limiter since Phase 7 (see rateLimitFairness.test.js).
+    const registerLimited = createTestApp({ REGISTER_RATE_LIMIT_MAX: '1' });
+    expect((await request(registerLimited).post('/api/v1/auth/register').send({})).status).toBe(400);
+    expect((await request(registerLimited).post('/api/v1/auth/register').send({})).status).toBe(429);
   });
 });

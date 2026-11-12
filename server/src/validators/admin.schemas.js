@@ -1,7 +1,7 @@
 'use strict';
 
 const { z, nameSchema, emailSchema, collegeCodeSchema, emailDomainsSchema, branchesSchema } = require('./common');
-const { COLLEGE_STATUSES } = require('../models/College');
+const { COLLEGE_STATUSES, STUDENT_VERIFICATION_MODES } = require('../models/College');
 
 const createCollegeSchema = z
   .object({
@@ -9,6 +9,7 @@ const createCollegeSchema = z
     code: collegeCodeSchema,
     emailDomains: emailDomainsSchema,
     branches: branchesSchema.optional(),
+    studentVerification: z.enum(STUDENT_VERIFICATION_MODES).optional(),
   })
   .strict();
 
@@ -18,6 +19,7 @@ const updateCollegeSchema = z
     emailDomains: emailDomainsSchema.optional(),
     branches: branchesSchema.optional(),
     status: z.enum(COLLEGE_STATUSES).optional(),
+    studentVerification: z.enum(STUDENT_VERIFICATION_MODES).optional(),
   })
   .strict()
   .refine((body) => Object.keys(body).length > 0, { error: 'Provide at least one field to update' });

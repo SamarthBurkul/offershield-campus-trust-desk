@@ -20,7 +20,8 @@ function useTestDatabase() {
   let server;
 
   beforeAll(async () => {
-    server = await MongoMemoryServer.create();
+    // A generous launch timeout: 36 suites start their own mongod in parallel on slower machines.
+    server = await MongoMemoryServer.create({ instance: { launchTimeout: 60_000 } });
     await connect();
   });
 

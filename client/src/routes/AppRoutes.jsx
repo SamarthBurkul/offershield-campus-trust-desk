@@ -10,6 +10,10 @@ import ChangePasswordPage from '../pages/ChangePasswordPage.jsx'
 import AdvisoriesPage from '../pages/AdvisoriesPage.jsx'
 import AdvisoryDetailPage from '../pages/AdvisoryDetailPage.jsx'
 import LandingPage from '../pages/LandingPage.jsx'
+import PendingApprovalPage from '../pages/PendingApprovalPage.jsx'
+import PrivacyPage from '../pages/PrivacyPage.jsx'
+import StaffStudentsPage from '../pages/StaffStudentsPage.jsx'
+import TermsPage from '../pages/TermsPage.jsx'
 import NotificationsPage from '../pages/NotificationsPage.jsx'
 import StaffAdvisoriesPage from '../pages/StaffAdvisoriesPage.jsx'
 import StaffAdvisoryEditPage from '../pages/StaffAdvisoryEditPage.jsx'
@@ -33,9 +37,12 @@ export default function AppRoutes() {
         <Route index element={<LandingPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
+        <Route path="terms" element={<TermsPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="change-password" element={<ChangePasswordPage />} />
+          <Route path="pending-approval" element={<PendingApprovalPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.STUDENT, ...STAFF_ROLES]} />}>
           <Route path="notifications" element={<NotificationsPage />} />
@@ -59,6 +66,7 @@ export default function AppRoutes() {
           <Route path="staff/advisories/new" element={<StaffAdvisoryEditPage />} />
           <Route path="staff/advisories/:id" element={<StaffAdvisoryEditPage />} />
           <Route path="staff/stats" element={<StatsPage />} />
+          <Route path="staff/students" element={<StaffStudentsPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.TPO_HEAD]} />}>
           <Route path="staff/audit" element={<AuditLogPage />} />
