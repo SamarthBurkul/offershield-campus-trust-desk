@@ -289,6 +289,31 @@ Indexes: `{ collegeId, userId, readAt, createdAt: -1 }`; TTL `{ createdAt: 1 }` 
 - `caseevents`: new type `evidence_purged` (always `visibleToStudent=false`, `actorRole: "system"`, `metadata { count, retentionMonths }`), written by `ops:retention`.
 - No new collections and no new indexes. Existing documents need no migration: missing `studentVerification` reads as `email_domain`, missing `isDemo` as `false`, and users created before Phase 7 simply have no recorded policy acceptance. `seed:demo` sets `isDemo: true` on existing `demo-alpha` / `demo-beta`.
 
+## Changed in Phase 9
+
+### `users`
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `passwordHash` | string | null | Now null for Google-only accounts (required unless `authMethods` includes `google`). |
+| `authMethods` | `['password' | 'google']` | Default `['password']`; backfilled by `ops:backfill-email-verified`. |
+| `googleSub` | string | Google subject; unique, sparse index. |
+| `emailVerifiedAt` | Date | null | Set at verification, Google sign-up/link, staff creation, or by the backfill (`createdAt`). |
+| `emailOtp` | `{ hash, expiresAt, attempts, lastSentAt, sentAt[] }` | `select: false`; HMAC of the code only; removed after verification. |
+| `emailPrefs` | `{ caseUpdates, advisories, staffAlerts }` | All default true. |
+
+### `advisories`
+
+`emailStats: { sent, audience }` — filled after the background email fan-out (critical/warning only).
+
+### `emaillogs` — model `EmailLog` (platform-wide)
+
+`collegeId?`, `userId`, `type`, `priority` (`critical` | `normal`), `status` (`sent` | `skipped_budget` | `skipped_pref` | `failed`), `providerMessageId?`, `errorCode?`, `createdAt`. TTL 90 days on `createdAt`; index `{ status, createdAt }` for the daily budget. Never stores bodies, addresses, codes, links or tokens.
+
+### `passwordresettokens` — model `PasswordResetToken`
+
+`userId`, `tokenHash` (SHA-256, unique), `expiresAt` (30 minutes; TTL index), `usedAt`, `createdAt`. At most three active per user.
+
 ## Planned collections
 
 | Collection | Phase | Purpose | Key fields |

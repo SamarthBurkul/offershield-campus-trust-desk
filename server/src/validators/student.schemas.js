@@ -23,4 +23,6 @@ const bulkApproveSchema = z
 
 const studentStatusSchema = z.object({ status: z.enum(['active', 'disabled']) }).strict();
 
-module.exports = { studentListQuerySchema, rejectStudentSchema, bulkApproveSchema, studentStatusSchema };
+const promoteYearSchema = z.object({ fromYear: z.number().int().min(1).max(4) }).strict();
+
+module.exports = { promoteYearSchema, studentListQuerySchema, rejectStudentSchema, bulkApproveSchema, studentStatusSchema };

@@ -324,3 +324,57 @@
 - **Context:** Students are the largest group and often on mobile data; they never need the staff desk, registry, stats or admin code.
 - **Decision:** `React.lazy` + `Suspense` (skeleton fallback) for every staff and admin page and for the privacy and terms pages. Landing, auth and student pages stay in the main chunk.
 - **Consequence:** The main JS chunk fell from 485 kB (143 kB gzip) to about 359 kB (107 kB gzip); staff pages load on first visit (a few kB to 32 kB each).
+
+## ADR-055: Google sign-in directly (OpenID Connect), not Firebase Authentication
+
+- **Context:** Students asked for "Sign in with Google". Firebase Authentication would add a second user store, a client SDK, Google scripts on every page and a dependency on a Firebase project, while OfferShield already owns sessions (httpOnly JWT cookie, `tokenVersion` revocation, tenant checks).
+- **Decision:** Talk to Google's OpenID Connect endpoints directly from the server. Google only proves the identity (`sub`, verified email, name, `hd`); OfferShield keeps its own users, roles, college tenancy and session cookie.
+- **Consequence:** One user store and one session model; revocation, rate limits and audits work exactly as for password users. We maintain the (small) OIDC code ourselves.
+
+## ADR-056: Server-side authorization-code flow with PKCE, verified with node:crypto (no google-auth-library)
+
+- **Context:** A browser pop-up or One Tap flow needs Google scripts and frames, which the strict CSP (`script-src 'self'`, `frame-ancestors 'none'`, `connect-src 'self'`) forbids. A verification library would be the only new dependency.
+- **Decision:** `GET /auth/google/start` redirects to Google with `state` (32 random bytes), `nonce` and a PKCE S256 challenge stored in a signed, httpOnly, SameSite=Lax, 10-minute `os_oauth` cookie (HMAC key derived from `JWT_SECRET`, cookie name bound into the MAC). The callback checks `state`, exchanges the code with the verifier, and verifies the RS256 ID token against Google's JWKS with `crypto.createPublicKey({ format: 'jwk' })` and `crypto.verify`: issuer, audience (`azp` when several), expiry (60 s skew), nonce and `email_verified === true`. Only the three fixed Google URLs are called. All redirects are fixed internal paths.
+- **Consequence:** CSP unchanged, no new dependency, no open redirect. JWKS is cached for an hour and refetched once on an unknown `kid`. The flow is covered with a locally generated RSA key and a mocked `fetch` (no network in tests).
+
+## ADR-057: Brevo transactional email over its HTTP API, without an SDK
+
+- **Context:** Email is needed for verification codes, self-service resets and notifications. Brevo's free plan (300/day) fits a pilot, and its HTTP API is one POST.
+- **Decision:** `services/email/brevoProvider.js` posts to the fixed `https://api.brevo.com/v3/smtp/email` with the `api-key` header, a 10 s `AbortController` timeout, one retry on 5xx/network/timeout and none on 4xx. Errors carry a code only. A `log` provider (default) keeps an in-memory outbox and, in development only, prints one line with the recipient, subject and the code or link.
+- **Consequence:** No SDK in the dependency tree; switching providers means one new file. Production with the log provider counts as "email off": nothing is sent and the UI behaves as in Phase 8.
+
+## ADR-058: Daily email budget with a reserve for critical mail
+
+- **Context:** The free plan's daily cap must not be exhausted by an advisory fan-out so that verification codes and reset links stop working.
+- **Decision:** `EmailLog` records every attempt (type, priority, status, provider id; never bodies, codes, links or addresses; TTL 90 days). Normal email is sent only while fewer than `EMAIL_DAILY_BUDGET` (default 250) emails were sent since 00:00 UTC; critical email (codes, resets, password changed) while fewer than 290. A process-local lock reserves slots so parallel fan-out lanes cannot overshoot. Advisory fan-out runs in batches of 50, five at a time, and stops at the budget; the advisory records "Emailed X of Y".
+- **Consequence:** Critical mail keeps working on a busy day. The count is per database (shared by all instances); the in-flight reservation is per process, so several instances could overshoot by at most their concurrency.
+
+## ADR-059: Email verification only when a real provider is configured
+
+- **Context:** Requiring a code that can never be delivered would lock every new student out.
+- **Decision:** `REQUIRE_EMAIL_VERIFICATION` defaults to true only when `EMAIL_PROVIDER=brevo`; production refuses to start with it true and the log provider. Password sign-ups then get a 6-digit `crypto.randomInt` code (stored as an HMAC bound to the user id, 10 minutes, 5 attempts, resend after 60 s, at most 5 per hour). Google sign-ups and staff created by the TPO head or super admin are verified at creation. The gate runs before pending approval and the temporary-password change; approving an unverified student is refused (409). Existing accounts are backfilled with `ops:backfill-email-verified` before verification is switched on.
+- **Consequence:** Phase 8 deployments are unaffected; real deployments get proof that a student controls the address before staff approve them.
+
+## ADR-060: Link an existing account to Google by verified email
+
+- **Context:** Students and staff who already have password accounts will press Continue with Google.
+- **Decision:** The callback looks up the user by `googleSub`, then by the lower-cased email. A match without a `googleSub` is linked (sets `googleSub`, adds `google` to `authMethods`, sets `emailVerifiedAt` if missing) and audited as `auth.google_linked`. A match already linked to a different Google account is refused. Linking relies on Google's `email_verified === true`.
+- **Consequence:** No duplicate accounts and no extra step for users. The trust placed in the Google-verified address is the same as a reset link to that address would give.
+
+## ADR-061: Microsoft sign-in is a future option, not built
+
+- **Context:** Some colleges use Microsoft 365 rather than Google Workspace.
+- **Decision:** Not in Phase 9. The OIDC code is provider-shaped (`services/oauth/google.js`, `authMethods`), so a `microsoft` method with its own fixed endpoints, issuer check (tenant-specific) and `oid` subject could be added later.
+- **Consequence:** Microsoft-only colleges keep password sign-in with email verification.
+
+## ADR-062: Policy version bump without forced re-acceptance
+
+- **Context:** The privacy notice gained Google sign-in, Brevo as a processor, the emails sent and how to opt out (version `2026-11-13`).
+- **Decision:** New registrations accept the new version (stored on the user). Existing users are not forced through a re-acceptance screen: the changes add processing only for features they opt into (Google) or can switch off (non-security email), and security email is part of operating the account.
+- **Consequence:** No interruption for current users; `policiesVersion` shows who accepted which version if a later change does need re-acceptance.
+
+## ADR-063: Reset token in the URL fragment
+
+- **Context:** A reset token in a query string can end up in server logs, proxies and `Referer` headers.
+- **Decision:** The emailed link is `/reset-password#token=…`; fragments are never sent to a server. The page reads it once and removes it with `history.replaceState`; the server already sends `Referrer-Policy: no-referrer`. Only the SHA-256 of the 32-byte token is stored (30 minutes, single use, at most three active per user, all invalidated after a successful reset).
+- **Consequence:** The token never reaches any server log. The page also accepts `?token=` for robustness.

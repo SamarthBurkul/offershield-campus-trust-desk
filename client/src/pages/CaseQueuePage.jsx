@@ -105,12 +105,12 @@ export default function CaseQueuePage() {
                 <Th>Case</Th>
                 <Th>Company / role</Th>
                 <Th>Student</Th>
-                <Th>Channel</Th>
+                <Th className="hidden min-[1600px]:table-cell">Channel</Th>
                 <Th>Priority</Th>
                 <Th>Status</Th>
                 <Th>Assignee</Th>
                 <Th>Signals</Th>
-                <Th>Last activity</Th>
+                <Th className="hidden min-[1600px]:table-cell">Last activity</Th>
               </tr>
             </THead>
             <TBody>
@@ -123,11 +123,21 @@ export default function CaseQueuePage() {
                         {item.caseNumber}
                       </Link>
                     </Td>
-                    <Td className="min-w-48">
+                    <Td className="min-w-40 min-[1600px]:min-w-48">
                       <div className="font-medium text-slate-900">{item.claimedCompany}</div>
                       {item.roleTitle && <div className="text-xs text-slate-500">{item.roleTitle}</div>}
+                      {/* Folded Channel + Last activity below 1600 px. */}
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 min-[1600px]:hidden">
+                        <span className="inline-flex items-center gap-1">
+                          <ChannelIcon className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                          {CHANNEL_LABELS[item.channel] ?? item.channel}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span title={formatDateTime(item.lastActivityAt)}>{relativeTime(item.lastActivityAt)}</span>
+                        {item.isStale && <span className="font-medium text-amber-700">· no recent activity</span>}
+                      </div>
                     </Td>
-                    <Td className="min-w-44">
+                    <Td className="min-w-36 min-[1600px]:min-w-44">
                       {item.student ? (
                         <div className="flex items-center gap-2.5">
                           <Avatar name={item.student.name} size="sm" />
@@ -142,7 +152,7 @@ export default function CaseQueuePage() {
                         '—'
                       )}
                     </Td>
-                    <Td>
+                    <Td className="hidden min-[1600px]:table-cell">
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-slate-600">
                         <ChannelIcon className="h-4 w-4 text-slate-400" aria-hidden="true" />
                         {CHANNEL_LABELS[item.channel] ?? item.channel}
@@ -184,7 +194,7 @@ export default function CaseQueuePage() {
                         )}
                       </div>
                     </Td>
-                    <Td className="whitespace-nowrap text-slate-600">
+                    <Td className="hidden whitespace-nowrap text-slate-600 min-[1600px]:table-cell">
                       <span title={formatDateTime(item.lastActivityAt)}>{relativeTime(item.lastActivityAt)}</span>
                       {item.isStale && (
                         <Badge tone="warning" size="sm" className="ml-2" title="No activity recently">

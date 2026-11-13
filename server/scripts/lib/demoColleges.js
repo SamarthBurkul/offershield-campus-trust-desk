@@ -58,6 +58,7 @@ async function seedDemoColleges(demoPassword, { log = console.log } = {}) {
           collegeId: college._id,
           passwordHash,
           mustChangePassword: false,
+          emailVerifiedAt: new Date(),
           policiesAcceptedAt: new Date(),
           policiesVersion: POLICIES_VERSION,
         });

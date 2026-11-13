@@ -6,6 +6,7 @@ const { notificationRepository, userRepository } = require('../../repositories')
 const { STAFF_ROLES } = require('../../models/User');
 const { render } = require('./templates');
 const { idOf } = require('../../utils/safeUser');
+const email = require('../email');
 
 const BATCH_SIZE = 500;
 const INTERNAL_LINK = /^\/(?!\/)[A-Za-z0-9/_-]*$/;
@@ -26,6 +27,8 @@ async function notify(collegeId, userIds, { type, context, link, refType, refId,
   for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
     await repo.insertMany(recipients.slice(i, i + BATCH_SIZE).map((userId) => ({ userId, type, title, body, link, refType, refId })));
   }
+  // Email copies (only for the email-enabled types) run in the background and never fail this call.
+  email.queueNotificationEmails(collegeId, recipients, { type, context, link, refType, refId });
   return recipients.length;
 }
 

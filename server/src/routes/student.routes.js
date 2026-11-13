@@ -13,6 +13,7 @@ function createStudentRouter() {
   router.use(requireRole('placement_officer', 'tpo_head'));
 
   router.get('/', validateQuery(schemas.studentListQuerySchema), controller.listStudents);
+  router.post('/promote-year', requireRole('tpo_head'), validateBody(schemas.promoteYearSchema), controller.promoteYear);
   router.post('/bulk-approve', validateBody(schemas.bulkApproveSchema), controller.bulkApprove);
   router.post('/:id/approve', validateBody(emptyBodySchema), controller.approve);
   router.post('/:id/reject', validateBody(schemas.rejectStudentSchema), controller.reject);

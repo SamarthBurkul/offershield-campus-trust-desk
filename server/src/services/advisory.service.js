@@ -141,6 +141,8 @@ function toStaffView(advisory, { indicators, acknowledgedCount = 0, audienceCoun
     audienceCount,
     acknowledgedCount,
     ackRate: rate(acknowledgedCount, audienceCount),
+    // Filled in the background after publish (critical/warning advisories only).
+    emailStats: advisory.emailStats?.audience != null ? { sent: advisory.emailStats.sent ?? 0, audience: advisory.emailStats.audience } : null,
     createdAt: iso(advisory.createdAt),
     updatedAt: iso(advisory.updatedAt),
   };

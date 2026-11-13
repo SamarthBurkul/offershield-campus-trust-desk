@@ -85,6 +85,13 @@ function PublishedView({ advisory, isHead, onWithdraw }) {
           </p>
         </div>
         <ProgressBar value={advisory.ackRate ?? 0} label="Acknowledgement rate" tone="success" />
+        {advisory.emailStats && (
+          <p className="text-sm text-slate-600">
+            Emailed <span className="font-medium tabular-nums text-slate-900">{advisory.emailStats.sent}</span> of{' '}
+            <span className="tabular-nums">{advisory.emailStats.audience}</span> students
+            {advisory.emailStats.sent < advisory.emailStats.audience ? ' (others opted out, are unverified, or the daily email limit was reached).' : '.'}
+          </p>
+        )}
         {advisory.acknowledgementBreakdown && (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>

@@ -9,11 +9,47 @@
 | 5 | Registry, lookup, look-alike detection, related-case linking, warning signals | **Passed (architect-reviewed 2026-11-11)** |
 | 6 | Advisories, notifications, stats, UI polish | **Passed (architect-reviewed and user-tested 2026-11-12)** |
 | 7 | Pilot readiness: dialog focus fix, manual-approval students, staff-assisted resets, fair rate limits, privacy/terms with consent, production single service, showcase demo college, ops scripts, deployment and user docs | **Passed (architect-reviewed 2026-11-12)** |
-| 8 | Premium UI redesign (presentation only): design system, role shells, every page restyled, en-IN formatting, lazy-loaded staff pages, screenshots | **Implemented — awaiting architect review** |
+| 8 | Premium UI redesign (presentation only): design system, role shells, every page restyled, en-IN formatting, lazy-loaded staff pages, screenshots | **Passed (architect-reviewed 2026-11-13)** |
+| 9 | Google sign-in (OIDC + PKCE), email service (Brevo/log) with budget, email verification, self-service password reset, email notifications with preferences, Account page, academic-year promotion, case-desk fold below 1600 px | **Implemented — awaiting architect review** |
+
+## Phase 9 — details
+
+**Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- Email service (`server/src/services/email/`): `log` (default; in-memory outbox, development console line) and `brevo` (fixed HTTP endpoint, 10 s timeout, one retry on 5xx/network) providers, allow-listed escaped templates, `EmailLog` (90-day TTL, no content), daily budget with a critical reserve and an in-process reservation lock, background sending that never blocks the API.
+- Google sign-in: server-side authorization-code flow with PKCE, signed `os_oauth` / `os_google_signup` cookies, ID-token verification with JWKS and `node:crypto` (no new dependency), account linking by verified email, Google registration page, fixed redirects.
+- Email verification (6-digit HMAC-stored codes, 10 minutes, 5 attempts, resend limits), the `EMAIL_NOT_VERIFIED` gate, 409 on approving unverified students, `ops:backfill-email-verified`.
+- Self-service reset: `forgot-password` (always 202), hashed single-use 30-minute tokens in the URL fragment, session revocation, audit and "password changed" email.
+- Email notifications for students (case updates, warning/critical advisories) and staff (new requests, pending students) with preferences; advisory "Emailed X of Y".
+- `GET/PATCH /account` and the Account page; `POST /staff/students/promote-year` with a confirmation dialog; staff students list shows verification and sign-in method.
+- Case desk folds Channel and Last activity under the company below 1600 px (no horizontal scroll at 1366 and 1440).
+- Privacy notice version `2026-11-13` (Google, Brevo, emails and opt-out); DEPLOYMENT (Google Cloud, Brevo DNS, rollout order, custom domain), OPERATIONS, SECURITY_DESIGN, SECURITY_CHECKLIST, API_CONTRACT, DATA_MODEL; ADR-055 to ADR-063.
+
+### Tests executed (2026-11-13, Node v22.13.1, MongoDB in memory)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm install` | up to date, no new dependencies | 0 |
+| `npm run test:server` | Test Suites: 43 passed, 43 total; Tests: 480 passed, 480 total | 0 |
+| `npm run test:client` | Test Files 20 passed (20); Tests 102 passed (102) | 0 |
+| `npm test` | 480 server + 102 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | main JS 375.13 kB (111.02 kB gzip); CSS 68.31 kB (12.58 kB gzip) | 0 |
+| `npm audit --omit=dev` | found 0 vulnerabilities | 0 |
+| Local smoke | development mode, `EMAIL_PROVIDER=log`, `REQUIRE_EMAIL_VERIFICATION=true` (process only), in-memory MongoDB, headless Chrome: 16/16 checks (register + printed code, forgot/reset with old session ended, info-request email without internal text, account year change and promote year, case desk without horizontal scroll at 1366/1440/1600, Google start accepted by Google for the dev redirect URI) | — |
+
+### Limitations
+
+- The full Google sign-in round trip needs a real Google account in a browser and was not automated (the start redirect and Google's acceptance of the client id and dev redirect URI were checked).
+- The email budget reservation is per process; several instances could overshoot by at most their concurrency. Rate-limit counters remain in memory.
+- Existing users are not asked to re-accept the updated privacy notice (ADR-062).
+- Microsoft sign-in is not implemented (ADR-061).
 
 ## Phase 8 — details
 
-**Status:** Implemented — awaiting architect review (not yet passed).
+**Status:** Passed (architect-reviewed 2026-11-13).
 
 ### Implemented
 
@@ -39,7 +75,7 @@
 
 ### Limitations
 
-- The case desk table scrolls horizontally inside its card below about 1600 px (nine columns).
+- The case desk table scrolled horizontally inside its card below about 1600 px (nine columns); fixed in Phase 9.
 - Toasts are polite live regions only; there is no notification history for them.
 
 ## Phase 7 — details

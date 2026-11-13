@@ -92,6 +92,18 @@ const envSchema = z
     // Development-only escape hatch for a local production smoke on http://localhost; ignored for https.
     COOKIE_SECURE_OVERRIDE: z.enum(['true', 'false']).optional(),
     RENDER_GIT_COMMIT: optionalString,
+    // Email (Phase 9). "log" keeps mail in memory (and prints OTPs/links in development only).
+    EMAIL_PROVIDER: z.enum(['log', 'brevo']).default('log'),
+    BREVO_API_KEY: optionalString,
+    EMAIL_FROM: z.email({ error: 'must be a valid email address' }).optional(),
+    EMAIL_FROM_NAME: z.string().min(1).max(80).default('OfferShield'),
+    EMAIL_DAILY_BUDGET: z.coerce.number().int().min(0).max(100000).default(250),
+    // Defaults to true only when a real provider is configured.
+    REQUIRE_EMAIL_VERIFICATION: z.enum(['true', 'false', '1', '0']).optional(),
+    // Google sign-in (OAuth 2.0 / OpenID Connect, server-side code flow with PKCE).
+    GOOGLE_CLIENT_ID: optionalString,
+    GOOGLE_CLIENT_SECRET: optionalString,
+    GOOGLE_REDIRECT_URI: z.url({ protocol: /^https?$/, error: 'must be a valid http(s) URL' }).optional(),
     // Used only by the seed scripts.
     SEED_SUPERADMIN_EMAIL: optionalString,
     SEED_SUPERADMIN_PASSWORD: optionalString,
@@ -105,7 +117,21 @@ const envSchema = z
         ctx.addIssue({ code: 'custom', path: [key], message: `is required when NODE_ENV is ${env.NODE_ENV}` });
       }
     }
+    if (env.EMAIL_PROVIDER === 'brevo') {
+      for (const key of ['BREVO_API_KEY', 'EMAIL_FROM']) {
+        if (env[key] === undefined) ctx.addIssue({ code: 'custom', path: [key], message: 'is required when EMAIL_PROVIDER is brevo' });
+      }
+    }
+    // Google is all-or-nothing: a partial setup is almost always a deployment mistake.
+    const google = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].filter((key) => env[key] !== undefined);
+    if (google.length === 1) {
+      const missing = google[0] === 'GOOGLE_CLIENT_ID' ? 'GOOGLE_CLIENT_SECRET' : 'GOOGLE_CLIENT_ID';
+      ctx.addIssue({ code: 'custom', path: [missing], message: 'is required when Google sign-in is partly configured' });
+    }
     if (env.NODE_ENV !== 'production') return;
+    if (env.REQUIRE_EMAIL_VERIFICATION && ['true', '1'].includes(env.REQUIRE_EMAIL_VERIFICATION) && env.EMAIL_PROVIDER === 'log') {
+      ctx.addIssue({ code: 'custom', path: ['REQUIRE_EMAIL_VERIFICATION'], message: 'cannot be true with EMAIL_PROVIDER=log in production (codes could not be delivered)' });
+    }
     if (env.JWT_SECRET === JWT_SECRET_PLACEHOLDER) {
       ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'must be replaced (it is the .env.example placeholder)' });
     }
@@ -148,6 +174,11 @@ function loadConfig(envObject = {}) {
   const httpsBase = Boolean(env.APP_BASE_URL && env.APP_BASE_URL.startsWith('https://'));
   // The override can only turn Secure off for a plain-http base URL (local production smoke).
   const cookieSecure = isProduction && !(env.COOKIE_SECURE_OVERRIDE === 'false' && !httpsBase);
+  const requireEmailVerification =
+    env.REQUIRE_EMAIL_VERIFICATION === undefined ? env.EMAIL_PROVIDER === 'brevo' : ['true', '1'].includes(env.REQUIRE_EMAIL_VERIFICATION);
+  const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  // Default: the public origin (APP_BASE_URL, else the first client origin, e.g. the Vite dev server that proxies /api).
+  const publicOrigin = env.APP_BASE_URL ?? env.CLIENT_ORIGINS[0];
   return Object.freeze({
     nodeEnv: env.NODE_ENV,
     isProduction,
@@ -183,6 +214,20 @@ function loadConfig(envObject = {}) {
     retentionMonths: env.RETENTION_MONTHS,
     allowDemoSeed: env.ALLOW_DEMO_SEED,
     commit: env.RENDER_GIT_COMMIT ?? null,
+    email: Object.freeze({
+      provider: env.EMAIL_PROVIDER,
+      brevoApiKey: env.BREVO_API_KEY,
+      from: env.EMAIL_FROM ?? null,
+      fromName: env.EMAIL_FROM_NAME,
+      dailyBudget: env.EMAIL_DAILY_BUDGET,
+      requireVerification: requireEmailVerification,
+    }),
+    google: Object.freeze({
+      enabled: googleEnabled,
+      clientId: env.GOOGLE_CLIENT_ID ?? null,
+      clientSecret: env.GOOGLE_CLIENT_SECRET ?? null,
+      redirectUri: env.GOOGLE_REDIRECT_URI ?? `${publicOrigin}/api/v1/auth/google/callback`,
+    }),
     seed: Object.freeze({
       superadminEmail: env.SEED_SUPERADMIN_EMAIL,
       superadminPassword: env.SEED_SUPERADMIN_PASSWORD,

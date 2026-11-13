@@ -31,6 +31,9 @@ function createPoliciesHandler(appConfig) {
       version: POLICIES_VERSION,
       retentionMonths: appConfig.retentionMonths,
       supportEmail: appConfig.supportEmail,
+      // Sign-in options the client shows (booleans only).
+      googleEnabled: Boolean(appConfig.google?.enabled),
+      emailEnabled: Boolean(appConfig.email && (appConfig.email.provider === 'brevo' || !appConfig.isProduction)),
     });
   };
 }

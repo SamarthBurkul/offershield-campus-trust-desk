@@ -7,6 +7,8 @@ import { Skeleton } from '../components/ui/index.js'
 import AdvisoriesPage from '../pages/AdvisoriesPage.jsx'
 import AdvisoryDetailPage from '../pages/AdvisoryDetailPage.jsx'
 import ChangePasswordPage from '../pages/ChangePasswordPage.jsx'
+import ForgotPasswordPage from '../pages/ForgotPasswordPage.jsx'
+import GoogleCompletePage from '../pages/GoogleCompletePage.jsx'
 import LandingPage from '../pages/LandingPage.jsx'
 import LoginPage from '../pages/LoginPage.jsx'
 import MyRequestsPage from '../pages/MyRequestsPage.jsx'
@@ -16,9 +18,12 @@ import NotificationsPage from '../pages/NotificationsPage.jsx'
 import PendingApprovalPage from '../pages/PendingApprovalPage.jsx'
 import RegisterPage from '../pages/RegisterPage.jsx'
 import RequestDetailPage from '../pages/RequestDetailPage.jsx'
+import ResetPasswordPage from '../pages/ResetPasswordPage.jsx'
 import StudentHomePage from '../pages/StudentHomePage.jsx'
+import VerifyEmailPage from '../pages/VerifyEmailPage.jsx'
 
 // Staff, admin and legal pages load on demand, so the student bundle stays lean.
+const AccountPage = lazy(() => import('../pages/AccountPage.jsx'))
 const AdminCollegeDetailPage = lazy(() => import('../pages/AdminCollegeDetailPage.jsx'))
 const AdminCollegesPage = lazy(() => import('../pages/AdminCollegesPage.jsx'))
 const AuditLogPage = lazy(() => import('../pages/AuditLogPage.jsx'))
@@ -43,12 +48,17 @@ export default function AppRoutes() {
         <Route index element={<LandingPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="register/google" element={<GoogleCompletePage />} />
+        <Route path="forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="privacy" element={page(<PrivacyPage />)} />
         <Route path="terms" element={page(<TermsPage />)} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="change-password" element={<ChangePasswordPage />} />
           <Route path="pending-approval" element={<PendingApprovalPage />} />
+          <Route path="verify-email" element={<VerifyEmailPage />} />
+          <Route path="account" element={page(<AccountPage />)} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.STUDENT, ...STAFF_ROLES]} />}>
           <Route path="notifications" element={<NotificationsPage />} />

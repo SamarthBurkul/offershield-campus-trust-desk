@@ -32,3 +32,20 @@ const changePasswordSchema = z
   .strict();
 
 module.exports = { registerSchema, loginSchema, changePasswordSchema };
+
+const verifyEmailSchema = z
+  .object({ code: z.string().trim().regex(/^\d{6}$/, { error: 'must be 6 digits' }) })
+  .strict();
+
+const forgotPasswordSchema = z.object({ email: z.string().trim().toLowerCase().min(1, { error: 'is required' }).max(254) }).strict();
+
+const resetPasswordSchema = z
+  .object({
+    token: z.string().trim().min(20).max(200).regex(/^[A-Za-z0-9_-]+$/, { error: 'is not valid' }),
+    newPassword: passwordSchema,
+  })
+  .strict();
+
+module.exports.verifyEmailSchema = verifyEmailSchema;
+module.exports.forgotPasswordSchema = forgotPasswordSchema;
+module.exports.resetPasswordSchema = resetPasswordSchema;

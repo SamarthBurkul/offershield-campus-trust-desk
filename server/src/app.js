@@ -15,6 +15,7 @@ const { createApiRateLimiter } = require('./middleware/rateLimiter');
 const { requestId } = require('./middleware/requestId');
 const { createRequestLogger } = require('./middleware/requestLogger');
 const { createClientRouter } = require('./middleware/serveClient');
+const { configureEmail } = require('./services/email');
 
 const DEFAULT_CLIENT_DIST = path.resolve(__dirname, '../../client/dist');
 const HSTS_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
@@ -37,7 +38,7 @@ const CSP_DIRECTIVES = Object.freeze({
  * Build the Express app without listening, so tests can drive it with Supertest.
  * In production it also serves the built client (one service, same origin as the API).
  * @param {ReturnType<import('./config/env').loadConfig>} config
- * @param {{ clientDistDir?: string, serveClient?: boolean, logSink?: (line: string) => void }} [options]
+ * @param {{ clientDistDir?: string, serveClient?: boolean, logSink?: (line: string) => void, emailFetch?: typeof fetch, emailSink?: (line: string) => void }} [options]
  */
 function createApp(config = defaultConfig, options = {}) {
   const app = express();
@@ -45,6 +46,10 @@ function createApp(config = defaultConfig, options = {}) {
   // Request lines go to stdout outside tests; tests opt in with their own sink.
   const logSink = options.logSink ?? (config.nodeEnv === 'test' ? null : undefined);
 
+  configureEmail(config, { fetchImpl: options.emailFetch, sink: options.emailSink });
+
+  // Per-app settings read by middleware (e.g. the email-verification gate).
+  app.locals.config = config;
   app.disable('x-powered-by');
   // 0 locally; 1 behind Render's proxy so req.ip (and the per-IP limits) use the real client address.
   app.set('trust proxy', config.trustProxy);

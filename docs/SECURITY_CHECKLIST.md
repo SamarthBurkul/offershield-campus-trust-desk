@@ -129,6 +129,34 @@ One row per rule in [SECURITY_DESIGN.md](SECURITY_DESIGN.md), with the automated
 | No `console.*` of bodies, queries, tokens or passwords | manual — grep of `server/src` and `server/scripts` in Phase 7 (one finding fixed: the error handler logged `req.originalUrl` with query strings) |
 | Production dependencies free of high/critical advisories | manual — `npm audit --omit=dev` (0 vulnerabilities, Phase 7) |
 
+## Phase 9: Google sign-in, email, self-service reset
+
+| Control | Proof |
+| --- | --- |
+| OAuth start uses state, nonce, PKCE S256 and a signed httpOnly SameSite=Lax cookie | `googleAuth.test.js` — "redirects to Google with state, nonce, PKCE S256 and a signed httpOnly SameSite=Lax cookie" |
+| State mismatch, missing/tampered cookie, Google error and replayed state are rejected | `googleAuth.test.js` — "state mismatch, missing cookie and a Google error never exchange the code"; "the state cookie is single-use (cleared on callback)"; "a tampered state cookie is rejected" |
+| ID token checks: signature, issuer, audience, expiry, nonce, email_verified | `googleAuth.test.js` — "rejects an ID token with %s" (6 cases); "rejects a token signed by another key, an unsigned token and a token-endpoint error" |
+| PKCE verifier sent; only fixed Google endpoints called | `googleAuth.test.js` — "the code exchange sends the PKCE verifier and calls only the fixed Google endpoints" |
+| No open redirect | `googleAuth.test.js` — "rejects an unknown intent or extra parameters"; "every callback outcome redirects to a fixed internal path" |
+| Linking by verified email; no takeover of an account linked to another Google subject | `googleAuth.test.js` — "links an existing password account by verified email, audits it and signs in"; "an account already linked to another Google account is not taken over" |
+| Disabled/rejected/suspended handled; pending gets only the pending page | `googleAuth.test.js` — "disabled and rejected accounts get account_unavailable; a suspended college gets the generic failure"; "a pending student gets a session and the pending page" |
+| Google registration enforces college, join code, branch, domain (or `hd`) and consent | `googleAuth.test.js` — "email_domain colleges require the Google address domain (or hd) to match"; "wrong join code, unknown branch and missing consent are rejected" |
+| Google-only accounts: generic 401 on password login, no change-password, staff reset adds password | `googleAuth.test.js` — "Google-only accounts (G7)" |
+| Logs contain error codes only, never OAuth codes or tokens | `googleAuth.test.js` — "failures log a code only, never the authorization code or a token" |
+| OTP stored as HMAC only, 10 min, 5 attempts, resend limits | `emailVerification.test.js` — "a password sign-up is unverified…"; "wrong codes give INVALID_CODE; after 5 attempts even the right code fails"; "an expired code fails"; "resend has a 60 s cooldown and a 5-per-hour cap…" |
+| Unverified accounts reach only the allowed routes; verification before pending approval; approval of unverified refused | `emailVerification.test.js` — "a pending, unverified student can verify; approval is refused until verified" |
+| Forgot-password answers identically; links only to active, verified password accounts | `passwordResetSelf.test.js` — "always answers 202 with the same body; only an active, verified password account gets a link" |
+| Reset tokens hashed, single use, expiring, max 3 active, rate limited | `passwordResetSelf.test.js` — "at most 3 active links per account…"; "the per-IP limiter allows 20 requests an hour"; "a token works once; expired, unknown and malformed tokens give INVALID_TOKEN" |
+| Reset ends sessions, audits without the token, emails "password changed" | `passwordResetSelf.test.js` — "sets the password, ends old sessions, clears mustChangePassword, audits and emails" |
+| Email text from allow-listed, escaped templates; no internal data in email | `emailService.test.js` — "escape HTML, read only allow-listed fields and carry the footer"; `emailNotifications.test.js` — "no internal information reaches the email (leak test)" |
+| EmailLog stores no content, codes or tokens | `emailService.test.js` — "opted-out recipients are logged as skipped_pref…" (exact key list); `emailVerification.test.js`, `passwordResetSelf.test.js` (code/token absent) |
+| Budget and critical reserve; fan-out stops at the budget | `emailService.test.js` — "critical mail is allowed under 290 sent today…"; `emailNotifications.test.js` — "the fan-out stops at the daily budget and reports what was sent" |
+| Brevo: fixed URL, api-key header, timeout, retry rules, no secrets in errors | `emailService.test.js` — "Brevo provider (G1)" |
+| Email never fails or slows the API | `emailService.test.js` — "a slow or failing provider never fails or slows the API" |
+| Unsafe production email/Google config refused, without printing values | `emailService.test.js` — "startup configuration (G15)" |
+| Account and promote-year scoped to the user / college; head only | `account.test.js`; `promoteYear.test.js` |
+| Reset token removed from the address bar | client `resetPassword.test.jsx` — "reads the token from the link, removes it from the address bar…" |
+
 ## Mandatory rules for later phases
 
 | Rule | Proof |

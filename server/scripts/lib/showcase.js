@@ -94,6 +94,7 @@ async function createPeople(college, passwordHash, createdAt) {
       email: person.email,
       passwordHash,
       mustChangePassword: false,
+      emailVerifiedAt: createdAt,
       ...(person.role === 'student' ? { year: person.year, branch: person.branch } : {}),
       policiesAcceptedAt: createdAt,
       policiesVersion: POLICIES_VERSION,

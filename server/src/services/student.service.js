@@ -19,6 +19,8 @@ function toStudentAccountView(user) {
     branch: user.branch ?? null,
     status: user.status,
     mustChangePassword: Boolean(user.mustChangePassword),
+    emailVerified: Boolean(user.emailVerifiedAt),
+    authMethods: Array.isArray(user.authMethods) && user.authMethods.length ? [...user.authMethods] : ['password'],
     createdAt: user.createdAt ?? null,
     lastLoginAt: user.lastLoginAt ?? null,
   };
@@ -78,6 +80,8 @@ async function moveStatus(user, studentId, from, update) {
 async function approve(user, id, { ip }) {
   const target = await findStudentOr404(user, id);
   if (target.status === 'active') return toStudentAccountView(target);
+  // Staff approve a person they can reach: the address must be confirmed first.
+  if (!target.emailVerifiedAt) throw new AppError(409, 'EMAIL_NOT_VERIFIED', 'This student has not verified their email address yet');
   const updated = await moveStatus(user, target._id, ['pending_approval', 'rejected'], {
     $set: { status: 'active', rejectionReason: null },
   });
@@ -102,7 +106,8 @@ async function reject(user, id, { reason }, { ip }) {
 async function bulkApprove(user, ids, { ip }) {
   const users = userRepository.forTenant(user.collegeId);
   const pending = await users.find(
-    { _id: { $in: ids }, role: ROLES.STUDENT, status: 'pending_approval' },
+    // Unverified students are skipped (see approve).
+    { _id: { $in: ids }, role: ROLES.STUDENT, status: 'pending_approval', emailVerifiedAt: { $ne: null } },
     { select: '_id', lean: true },
   );
   const approved = [];
@@ -129,4 +134,28 @@ async function setStatus(user, id, status, { ip }) {
   return toStudentAccountView(updated);
 }
 
-module.exports = { listStudents, approve, reject, bulkApprove, setStatus, toStudentAccountView };
+const MAX_YEAR = 5;
+
+/**
+ * Academic-year upkeep (TPO head): every active student of this college in `fromYear` moves up one
+ * year. Run once after results each June, from the final year down. Returns the count.
+ */
+async function promoteYear(user, { fromYear }, { ip }) {
+  if (fromYear >= MAX_YEAR) throw new AppError(400, 'VALIDATION_ERROR', 'Invalid request: fromYear: must be at most 4');
+  const result = await userRepository
+    .forTenant(user.collegeId)
+    .updateMany({ role: ROLES.STUDENT, status: 'active', year: fromYear }, { $inc: { year: 1 } });
+  const promoted = result.modifiedCount;
+  await audit.record({
+    collegeId: user.collegeId,
+    actor: { id: user.id, role: user.role },
+    action: 'student.promote_year',
+    entityType: 'college',
+    entityId: user.collegeId,
+    metadata: { fromYear, toYear: fromYear + 1, count: promoted },
+    ip,
+  });
+  return { promoted, fromYear, toYear: fromYear + 1 };
+}
+
+module.exports = { listStudents, approve, reject, bulkApprove, setStatus, promoteYear, toStudentAccountView };

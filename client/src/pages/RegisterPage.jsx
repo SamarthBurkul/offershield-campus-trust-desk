@@ -4,9 +4,11 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
+import GoogleButton, { OrDivider } from '../components/GoogleButton.jsx'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import { Button, Card, ErrorAlert, SelectField, TextField } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
+import usePolicies from '../hooks/usePolicies.js'
 
 const EMPTY = { name: '', email: '', password: '', collegeCode: '', joinCode: '', year: '1', branch: '', acceptPolicies: false }
 
@@ -23,6 +25,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState(EMPTY)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const { googleEnabled } = usePolicies()
 
   if (!loading && user && !submitting) return <Navigate to={homePathForRole(user.role)} replace />
 
@@ -38,6 +41,7 @@ export default function RegisterPage() {
     setSubmitting(true)
     try {
       await register({ ...form, year: Number(form.year) })
+      // ProtectedRoute sends unverified or pending accounts to their gate page.
       navigate('/student', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Unable to register right now. Please try again.'))
@@ -52,6 +56,12 @@ export default function RegisterPage() {
         your placement cell will approve your account. They also give you the college code and join code.
       </p>
       <Card>
+        {googleEnabled && (
+          <>
+            <GoogleButton intent="register" label="Sign up with Google" />
+            <OrDivider />
+          </>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <ErrorAlert message={error} />
           <TextField label="Full name" autoComplete="name" required value={form.name} onChange={update('name')} />

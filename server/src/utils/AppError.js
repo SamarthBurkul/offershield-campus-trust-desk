@@ -9,12 +9,14 @@ class AppError extends Error {
    * @param {number} statusCode HTTP status, e.g. 404
    * @param {string} code UPPER_SNAKE error code, e.g. "NOT_FOUND"
    * @param {string} message Safe, user-facing message
+   * @param {object} [details] Optional safe, structured details (e.g. retryAfterSeconds)
    */
-  constructor(statusCode, code, message) {
+  constructor(statusCode, code, message, details) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
     this.code = code;
+    if (details !== undefined) this.details = details;
   }
 }
 

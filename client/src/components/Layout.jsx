@@ -6,7 +6,7 @@ import PublicLayout from './layout/PublicLayout.jsx'
 import StudentShell from './layout/StudentShell.jsx'
 
 // Marketing pages always use the public layout, with their own full-bleed hero.
-const MARKETING_PATHS = new Set(['/', '/login', '/register'])
+const MARKETING_PATHS = new Set(['/', '/login', '/register', '/register/google', '/forgot-password', '/reset-password'])
 
 /**
  * Chooses the shell for the current user (presentation only — ProtectedRoute and the server enforce access):

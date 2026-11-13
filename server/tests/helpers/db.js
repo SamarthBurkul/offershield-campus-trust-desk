@@ -6,6 +6,8 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const { connectDB, disconnectDB } = require('../../src/config/db');
 
 async function clearDatabase() {
+  // Background email work from the finished test must not write into the next one.
+  await require('../../src/services/email').flushEmails();
   // Native driver deleteMany keeps indexes and bypasses the AuditLog append-only hooks (test teardown only).
   const collections = await mongoose.connection.db.collections();
   await Promise.all(collections.map((collection) => collection.deleteMany({})));

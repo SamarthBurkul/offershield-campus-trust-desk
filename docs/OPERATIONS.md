@@ -24,7 +24,7 @@ The mode can be changed later on the college page; existing accounts are not aff
 - **Manual approval:** Students → Pending. Check each name and email against the enrolment list; approve (or select several and "Approve selected"), or reject unknown registrations (an optional reason is kept for staff only). The staff home page shows the pending count, and staff get a "New student awaiting approval" notification.
 - **Disable / enable:** Students → Active → Disable ends the student's sessions immediately and blocks sign-in; Disabled → Enable restores it.
 
-## Password resets (no email is sent)
+## Password resets (staff-assisted)
 
 | Who forgot | Who resets | Where |
 | --- | --- | --- |
@@ -37,6 +37,25 @@ The mode can be changed later on the college page; existing accounts are not aff
 3. Their old sessions end immediately; at the next sign-in they must choose a new password.
 
 Every reset is in the audit log (`user.password_reset`, without the password).
+
+With email configured (Brevo), students and staff can also use **Forgot password?** on the sign-in page: a one-time link valid for 30 minutes (`auth.password_reset_self` in the audit log). Accounts that sign in only with Google get a reminder to use Continue with Google instead; a staff-assisted reset gives them a password as well.
+
+## Email (Phase 9)
+
+- **What is sent:** verification codes, reset links, "password changed" notices (critical, always sent); case updates to students, warning/critical advisories, and staff alerts for new requests and pending students (normal, can be switched off on the Account page).
+- **Daily budget:** normal mail stops at `EMAIL_DAILY_BUDGET` (default 250) emails per UTC day, critical mail at 290 (Brevo free plan: 300/day). The advisory page shows "Emailed X of Y"; a smaller X means opt-outs, unverified students or the budget.
+- **Checking delivery:** the `emaillogs` collection has one row per attempt (`type`, `priority`, `status` = sent / skipped_budget / skipped_pref / failed, `errorCode`), kept 90 days, with no content. Many `failed` rows with `BREVO_401` mean the API key is wrong; `BREVO_400` usually means the sender address is not verified in Brevo.
+- **Email verification:** with Brevo, password sign-ups must enter a 6-digit code before anything else; staff cannot approve an unverified student. A student who never got the code can press Resend (after 60 s, 5 per hour); otherwise check the spam folder and the address on the Students page.
+
+## Google sign-in (Phase 9)
+
+- Shown on the sign-in and registration pages when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set.
+- An existing account with the same email is linked automatically on first Google sign-in (`auth.google_linked` in the audit log). New students finish registration with the college code and join code; in email-domain colleges the Google address (or the Google Workspace domain) must match the college domains.
+- Disabled or rejected accounts see "This account cannot sign in".
+
+## Academic-year upkeep (each June)
+
+After results, the TPO head opens **Students → Promote year**, starts with **year 4** (→ 5), then 3, 2 and 1, so nobody moves twice. The dialog shows how many active students will move; the action is audited (`student.promote_year` with the count). Students can also correct their own year and branch on the Account page (`user.profile_update`, field names only).
 
 ## Demo environment
 

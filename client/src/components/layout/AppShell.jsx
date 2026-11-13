@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { STAFF_ROLES } from '../../auth/roles.js'
+import { isRestricted } from '../../auth/accountState.js'
 import { useAuth } from '../../auth/useAuth.js'
 import DemoBanner from '../DemoBanner.jsx'
 import NotificationBell from '../NotificationBell.jsx'
@@ -95,12 +96,12 @@ function SidebarNav({ onNavigate }) {
 
 /** Staff, TPO head and super admin shell: navy sidebar (off-canvas below lg) and a top bar. */
 export default function AppShell() {
-  const { user } = useAuth()
+  const { user, emailVerificationRequired } = useAuth()
   const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const showNav = navGroupsFor(user).length > 0
   const isStaff = STAFF_ROLES.includes(user.role)
-  const showBell = user.collegeId && !user.mustChangePassword && user.status !== 'pending_approval'
+  const showBell = user.collegeId && !isRestricted(user, emailVerificationRequired)
 
   return (
     <div className="min-h-screen bg-slate-50">

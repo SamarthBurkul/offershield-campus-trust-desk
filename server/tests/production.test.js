@@ -214,6 +214,6 @@ describe('GET /api/v1/health/ready', () => {
   it('GET /api/v1/policies exposes the policy version and retention period', async () => {
     const res = await request(createTestApp({ RETENTION_MONTHS: '18', SUPPORT_EMAIL: 'privacy@desk.example.edu' })).get('/api/v1/policies');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ version: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), retentionMonths: 18, supportEmail: 'privacy@desk.example.edu' });
+    expect(res.body).toEqual({ version: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), retentionMonths: 18, supportEmail: 'privacy@desk.example.edu', googleEnabled: false, emailEnabled: true });
   });
 });

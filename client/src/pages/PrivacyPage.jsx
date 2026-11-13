@@ -3,7 +3,16 @@ import LegalLayout, { LegalSection } from '../components/LegalLayout.jsx'
 import usePageTitle from '../hooks/usePageTitle.js'
 import usePolicies from '../hooks/usePolicies.js'
 
-const SECTIONS = ['What we collect and why','What we do not collect','Who can see what','Evidence handling and retention','Outcomes are findings, not guarantees','Corrections and deletion']
+const SECTIONS = [
+  'What we collect and why',
+  'What we do not collect',
+  'Signing in with Google',
+  'Emails we send',
+  'Who can see what',
+  'Evidence handling and retention',
+  'Outcomes are findings, not guarantees',
+  'Corrections and deletion',
+]
 
 export default function PrivacyPage() {
   usePageTitle('Privacy notice')
@@ -21,7 +30,8 @@ export default function PrivacyPage() {
         <ul>
           <li>
             <strong>Your account:</strong> name, email, college, year and branch, a hashed password (never the password itself),
-            account status, the time you accepted this notice, and your last sign-in time. Used to sign you in and to send
+            or your Google account id if you sign in with Google, whether and when your email address was verified, your email
+            preferences, account status, the time you accepted this notice, and your last sign-in time. Used to sign you in and to send
             advisories to the right batches.
           </li>
           <li>
@@ -50,7 +60,45 @@ export default function PrivacyPage() {
         <p>
           OfferShield never asks for your Aadhaar number, PAN, bank account or card numbers, or OTPs, and the request form blocks
           Aadhaar- and PAN-like numbers. Please do not upload copies of identity documents. There is no location tracking, no
-          advertising or analytics cookies, and no email or SMS is sent: the only cookie is your sign-in session.
+          advertising or analytics cookies, no SMS and no marketing email. Cookies are used only for your sign-in session and,
+          for a few minutes while you sign in with Google, to protect that sign-in.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Signing in with Google">
+        <p>
+          If you choose Continue with Google, Google confirms who you are and OfferShield receives only your name, your email
+          address, your Google account id and, for college Google accounts, your college&apos;s Google domain. OfferShield does not
+          receive your Google password, contacts, files or any other Google data, and does not load Google scripts on its pages.
+          If an OfferShield account already uses the same email address, it is linked to your Google account the first time you
+          sign in with Google.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Emails we send">
+        <p>
+          Emails are delivered by Brevo (Sendinblue SAS), which processes your name and email address only to deliver them.
+          OfferShield sends:
+        </p>
+        <ul>
+          <li>
+            <strong>Security emails (always sent):</strong> your verification code, password reset links, a reminder to use Google
+            if your account has no password, and a notice when your password changes.
+          </li>
+          <li>
+            <strong>Updates on your requests:</strong> when your placement cell asks for information, sends a message, records an
+            outcome or reopens a request. The email says only that something happened; you sign in to read it.
+          </li>
+          <li>
+            <strong>Warning and critical advisories</strong> for your year or branch.
+          </li>
+          <li>
+            <strong>Staff alerts</strong> (placement staff only): new requests and students waiting for approval.
+          </li>
+        </ul>
+        <p>
+          Turn off any non-security email on your <Link to="/account">Account</Link> page. Emails never contain evidence, internal
+          notes or other students&apos; details. A delivery record (type, status and time, never the content) is kept for 90 days.
         </p>
       </LegalSection>
 

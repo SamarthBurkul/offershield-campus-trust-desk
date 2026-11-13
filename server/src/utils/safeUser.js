@@ -16,6 +16,8 @@ function toSafeUser(user) {
     collegeId: idOf(user.collegeId),
     status: user.status,
     mustChangePassword: Boolean(user.mustChangePassword),
+    emailVerified: Boolean(user.emailVerifiedAt),
+    authMethods: Array.isArray(user.authMethods) && user.authMethods.length ? [...user.authMethods] : ['password'],
     year: isStudent ? (user.year ?? null) : null,
     branch: isStudent ? (user.branch ?? null) : null,
     lastLoginAt: user.lastLoginAt ?? null,

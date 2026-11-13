@@ -3,6 +3,8 @@
 const { Router } = require('express');
 const healthRoutes = require('./health.routes');
 const { createAuthRouter } = require('./auth.routes');
+const { createGoogleAuthRouter } = require('./googleAuth.routes');
+const { createAccountRouter } = require('./account.routes');
 const { createAdminRouter } = require('./admin.routes');
 const { createCollegeRouter } = require('./college.routes');
 const { createStaffRouter } = require('./staff.routes');
@@ -24,7 +26,9 @@ function createApiRouter(config) {
 
   router.use('/health', healthRoutes);
   router.get('/policies', createPoliciesHandler(config));
+  router.use('/auth/google', createGoogleAuthRouter(deps));
   router.use('/auth', createAuthRouter(deps));
+  router.use('/account', createAccountRouter(deps));
   router.use('/admin', createAdminRouter(deps));
   router.use('/college', createCollegeRouter(deps));
   router.use('/staff', createStaffRouter(deps));

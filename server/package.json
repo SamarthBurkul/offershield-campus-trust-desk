@@ -16,7 +16,8 @@
     "seed:superadmin": "node scripts/seed-superadmin.js",
     "seed:demo": "node scripts/seed-demo.js",
     "seed:showcase": "node scripts/seed-showcase.js",
-    "ops:retention": "node scripts/ops-retention.js"
+    "ops:retention": "node scripts/ops-retention.js",
+    "ops:backfill-email-verified": "node scripts/ops-backfill-email-verified.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { FileSearch, Home, Megaphone, Menu } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
+import { isRestricted } from '../../auth/accountState.js'
 import { useAuth } from '../../auth/useAuth.js'
 import DemoBanner from '../DemoBanner.jsx'
 import NotificationBell from '../NotificationBell.jsx'
@@ -18,9 +19,9 @@ const STUDENT_NAV = [
 
 /** Student shell: navy top bar (nav moves into a sheet below md) and a readable content column. */
 export default function StudentShell() {
-  const { user } = useAuth()
+  const { user, emailVerificationRequired } = useAuth()
   const [sheetOpen, setSheetOpen] = useState(false)
-  const restricted = user.mustChangePassword || user.status === 'pending_approval'
+  const restricted = isRestricted(user, emailVerificationRequired)
   const links = restricted ? [] : STUDENT_NAV
 
   const navClass = (mobile) => ({ isActive }) =>

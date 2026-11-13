@@ -1,10 +1,11 @@
 import clsx from 'clsx'
-import { ChevronDown, KeyRound, LogOut, Search, X } from 'lucide-react'
+import { ChevronDown, KeyRound, LogOut, Search, UserCog, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { errorMessage } from '../../api/errors.js'
 import { lookup } from '../../api/lookup.js'
 import { ROLE_LABELS } from '../../auth/roles.js'
+import { hasPassword, isRestricted } from '../../auth/accountState.js'
 import { useAuth } from '../../auth/useAuth.js'
 import LookupResultCard from '../LookupResultCard.jsx'
 import { Avatar, DropdownMenu, Spinner } from '../ui/index.js'
@@ -28,11 +29,12 @@ export function SiteFooter({ tone = 'light', className }) {
   )
 }
 
-/** Avatar menu: name, role, change password and log out. */
+/** Avatar menu: name, role, account settings, change password and log out. */
 export function UserMenu({ tone = 'light', compact = false }) {
-  const { user, logout } = useAuth()
+  const { user, logout, emailVerificationRequired } = useAuth()
   const navigate = useNavigate()
   if (!user) return null
+  const restricted = isRestricted(user, emailVerificationRequired)
 
   async function handleLogout() {
     await logout()
@@ -60,7 +62,8 @@ export function UserMenu({ tone = 'light', compact = false }) {
         </div>
       }
       items={[
-        !user.mustChangePassword && { label: 'Change password', icon: KeyRound, onSelect: () => navigate('/change-password') },
+        !restricted && { label: 'Account', icon: UserCog, onSelect: () => navigate('/account') },
+        !user.mustChangePassword && hasPassword(user) && { label: 'Change password', icon: KeyRound, onSelect: () => navigate('/change-password') },
         { label: 'Log out', icon: LogOut, tone: 'danger', onSelect: handleLogout },
       ]}
     />

@@ -2,7 +2,7 @@
 
 OfferShield is a Campus Recruitment Trust & Verification Desk for colleges. Students can search their college's reviewed recruiter records and confirmed suspicious indicators, and submit structured verification requests, with evidence, for suspicious external job or internship offers. Placement staff investigate each request as a case, the TPO head records the final decision with reasons, confirmed findings go into the college's registry, and the TPO publishes targeted advisories to students. It is multi-tenant (one tenant = one college) and is **not** a scam-detecting AI, placement ERP, job portal, recruiter marketplace or ATS — automated checks only assist staff and never decide whether an offer is genuine.
 
-> **Status:** Phases 1–7 passed review; Phase 8 (premium UI redesign) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
+> **Status:** Phases 1–8 passed review; Phase 9 (Google sign-in, email verification and notifications, self-service reset, academic-year upkeep) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
 >
 > **Live demo:** <URL> (to be added after the Render deployment)
 
@@ -21,6 +21,12 @@ Pilot features (Phase 7):
 - **Privacy notice and terms** with recorded consent; evidence **retention** script.
 - **One production service:** Express serves the built client with a strict CSP, HSTS, caching and compression; JSON request logs with request ids; readiness check for Render.
 - **Showcase demo college** ("Demo Institute of Technology") with six weeks of realistic, anonymised activity, resettable with one command.
+
+Accounts and email (Phase 9, all optional):
+
+- **Continue with Google** (server-side OpenID Connect with PKCE; no Google scripts, CSP unchanged), linking existing accounts by verified email.
+- **Email via Brevo:** verification codes for password sign-ups, self-service "Forgot password?" links, case updates, warning/critical advisories and staff alerts, with per-user preferences and a daily budget.
+- **Account page** (name, year, branch, email preferences) and a TPO-head **Promote year** action for each June.
 
 ## Screenshots
 
@@ -101,6 +107,7 @@ Invoke-RestMethod http://localhost:5173/api/v1/health    # through the Vite dev 
 | `npm run seed:superadmin -w server` | Create the super admin from `SEED_SUPERADMIN_*` (idempotent) |
 | `npm run seed:demo -w server` | Create demo colleges, staff and students using `SEED_DEMO_PASSWORD` (idempotent) |
 | `npm run seed:showcase -w server [-- --reset]` | Create the showcase demo college; `--reset` deletes and rebuilds every `isDemo` college |
+| `npm run ops:backfill-email-verified -w server` | Phase 9 rollout: mark existing accounts as email-verified and password-based (idempotent, prints counts) |
 | `npm run ops:retention -w server [-- --apply]` | Evidence retention: dry run by default, `--apply` deletes evidence of cases closed more than `RETENTION_MONTHS` ago |
 
 ## Project structure

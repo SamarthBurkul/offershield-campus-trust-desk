@@ -29,4 +29,8 @@ async function resetPassword(req, res) {
   res.status(200).json(await staffService.resetPassword(actorOf(req), req.tenant, req.params.id, { ip: req.ip }));
 }
 
-module.exports = { listStudents, approve, reject, bulkApprove, setStatus, resetPassword };
+async function promoteYear(req, res) {
+  res.status(200).json(await studentService.promoteYear(req.user, req.body, { ip: req.ip }));
+}
+
+module.exports = { promoteYear, listStudents, approve, reject, bulkApprove, setStatus, resetPassword };

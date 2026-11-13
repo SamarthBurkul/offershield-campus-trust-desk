@@ -519,6 +519,30 @@ New type `student_pending` → all active staff, link `/staff/students`, text "N
 
 In production the same service serves the client: non-`/api` GETs that accept HTML return `index.html` (`Cache-Control: no-cache`), `/assets/*` are immutable for a year, unknown `/api/*` stay JSON 404.
 
+### Accounts, Google sign-in and email (Phase 9)
+
+| Method | Path | Roles | Success | Errors |
+| --- | --- | --- | --- | --- |
+| GET | `/policies` | public | 200 adds `googleEnabled`, `emailEnabled` (booleans) | — |
+| GET | `/auth/me` | signed in | 200 adds `emailVerificationRequired`; `user` adds `emailVerified`, `authMethods` | 401 |
+| POST | `/auth/verify-email` `{ code }` | signed in | 200 `{ user }` | 400 `INVALID_CODE` / `VALIDATION_ERROR`, 401, 429 |
+| POST | `/auth/resend-verification` | signed in | 200 `{ sent, retryAfterSeconds }` | 429 `RESEND_TOO_SOON` / `RESEND_LIMIT` (`details.retryAfterSeconds`), 401 |
+| POST | `/auth/forgot-password` `{ email }` | public | 202 `{ message }` (always the same) | 400, 429 `RATE_LIMITED` (20/h per IP, 3/h per address) |
+| POST | `/auth/reset-password` `{ token, newPassword }` | public | 200 `{ message }` | 400 `INVALID_TOKEN` / `VALIDATION_ERROR`, 429 |
+| GET | `/auth/google/start?intent=login|register` | public | 302 to Google; sets `os_oauth` | 400, 404 when Google is not configured |
+| GET | `/auth/google/callback` | public (Google redirect) | 302 to `/student`, `/staff`, `/admin`, `/pending-approval` (session set) or `/register/google[?notice=no_account]` (sets `os_google_signup`) | 302 `/login?error=google_failed` or `/login?error=account_unavailable`; 404 when not configured |
+| GET | `/auth/google/pending` | Google sign-up in progress | 200 `{ email, name }` | 401 `GOOGLE_SIGNUP_EXPIRED` |
+| POST | `/auth/google/complete` `{ collegeCode, joinCode, year, branch, acceptPolicies: true }` | Google sign-up in progress | 201 `{ user }` + session | 400 `REGISTRATION_REJECTED` / `VALIDATION_ERROR`, 401 `GOOGLE_SIGNUP_EXPIRED`, 409 `EMAIL_TAKEN`, 429 |
+| GET | `/account` | any signed-in role | 200 `{ account }` (safe user + `hasPassword`, `emailPrefs`) | 401, 403 gates |
+| PATCH | `/account` `{ name?, year?, branch?, emailPrefs? }` | any signed-in role (year/branch students only) | 200 `{ account }` | 400, 401, 403 gates |
+| POST | `/staff/students/promote-year` `{ fromYear: 1-4 }` | `tpo_head` | 200 `{ promoted, fromYear, toYear }` | 400, 401, 403 |
+| POST | `/staff/students/:id/approve` | staff | (unchanged) | adds 409 `EMAIL_NOT_VERIFIED` |
+| GET | `/staff/students` | staff | students add `emailVerified`, `authMethods` | — |
+| GET | `/staff/advisories/:id` | staff | adds `emailStats: { sent, audience } | null` | — |
+| POST | `/auth/change-password` | signed in | (unchanged) | adds 400 `PASSWORD_NOT_SET` (Google-only) |
+
+Every authenticated route except `/auth/me`, logout, change-password, verify-email and resend-verification returns `403 EMAIL_NOT_VERIFIED` while verification is required and pending; the server checks email verification first, then the temporary password, then pending approval; the client shows the verify-email page first, then the pending page, then change-password.
+
 ## Planned route groups (not implemented)
 
 | Group | Phase | Purpose |

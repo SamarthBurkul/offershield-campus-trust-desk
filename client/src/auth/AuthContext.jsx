@@ -2,16 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as authApi from '../api/auth.js'
 import { AuthContext } from './useAuth.js'
 
-const SIGNED_OUT = Object.freeze({ user: null, college: null, loading: false })
+const SIGNED_OUT = Object.freeze({ user: null, college: null, loading: false, emailVerificationRequired: false })
 
 // The session lives in an httpOnly cookie; the client only ever knows the safe user returned by the API.
 export function AuthProvider({ children }) {
-  const [state, setState] = useState({ user: null, college: null, loading: true })
+  const [state, setState] = useState({ user: null, college: null, loading: true, emailVerificationRequired: false })
 
   const refresh = useCallback(async () => {
     try {
-      const { user, college } = await authApi.getMe()
-      setState({ user, college, loading: false })
+      const { user, college, emailVerificationRequired = false } = await authApi.getMe()
+      setState({ user, college, loading: false, emailVerificationRequired })
       return user
     } catch {
       setState(SIGNED_OUT)
@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
     let active = true
     authApi
       .getMe()
-      .then(({ user, college }) => active && setState({ user, college, loading: false }))
+      .then(({ user, college, emailVerificationRequired = false }) => active && setState({ user, college, loading: false, emailVerificationRequired }))
       .catch(() => active && setState(SIGNED_OUT))
     return () => {
       active = false

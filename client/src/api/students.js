@@ -32,3 +32,9 @@ export async function resetUserPassword(id) {
   const { data } = await apiClient.post(`/staff/users/${encodeURIComponent(id)}/reset-password`, {})
   return data
 }
+
+/** TPO head only: move every active student of `fromYear` up one year. Resolves to { promoted, fromYear, toYear }. */
+export async function promoteYear(fromYear) {
+  const { data } = await apiClient.post('/staff/students/promote-year', { fromYear })
+  return data
+}

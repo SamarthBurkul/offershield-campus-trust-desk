@@ -69,6 +69,22 @@ Set these under **Environment** on Render. Values are never printed by the serve
 | `EVIDENCE_LINK_TTL_SECONDS` | `300` | Lifetime of an evidence download link. |
 | `ALLOW_DEMO_SEED` | `false` | Lets the demo seeds run against a production configuration. Leave `false`. |
 
+### Email and Google sign-in (Phase 9, optional)
+
+Leave all of these unset and OfferShield behaves exactly as in Phase 8 (no email, no Google button, staff-assisted resets only).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `EMAIL_PROVIDER` | `log` | `brevo` to send real email. `log` sends nothing in production. |
+| `BREVO_API_KEY` | — | Brevo → SMTP & API → API keys. Required with `brevo`. Secret. |
+| `EMAIL_FROM` | — | Verified sender address, e.g. `desk@yourdomain.in`. Required with `brevo`. |
+| `EMAIL_FROM_NAME` | `OfferShield` | Sender name. |
+| `EMAIL_DAILY_BUDGET` | `250` | Normal emails per UTC day (critical mail may go up to 290). |
+| `REQUIRE_EMAIL_VERIFICATION` | `true` with `brevo`, else `false` | Password sign-ups must enter an emailed code. Startup fails if `true` with `log` in production. |
+| `GOOGLE_CLIENT_ID` | — | Google Cloud OAuth client id. Set both or neither. |
+| `GOOGLE_CLIENT_SECRET` | — | Google Cloud OAuth client secret. Secret. |
+| `GOOGLE_REDIRECT_URI` | `${APP_BASE_URL}/api/v1/auth/google/callback` | Must match the redirect URI registered in Google Cloud exactly. |
+
 ### Never set on Render
 
 | Variable | Why |
@@ -88,6 +104,40 @@ Set these under **Environment** on Render. Values are never printed by the serve
 4. Optional demo data in the production database: `npm run seed:showcase -w server` from your machine (it creates only the `demo-campus` college, marked `isDemo`, behind the demo banner). Do not seed demo data into a database used by a real college unless you want it there.
 5. Sign in as the super admin and onboard the pilot college (see [OPERATIONS.md](OPERATIONS.md)).
 6. Check response headers on the home page: `content-security-policy`, `strict-transport-security`, `content-encoding: gzip|br`.
+
+## 4a. Google Cloud setup (Google sign-in)
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → create a project (e.g. "OfferShield").
+2. **APIs & Services → OAuth consent screen**: user type **External**; app name, support email, logo optional; authorised domain = your domain (e.g. `onrender.com` or your custom domain); scopes: `openid`, `email`, `profile` only (no sensitive scopes, so no Google review is needed). While the app is in **Testing**, only listed test users can sign in; click **Publish app** for the pilot.
+3. **Credentials → Create credentials → OAuth client ID → Web application**:
+   - Authorised JavaScript origins: none needed (the flow is server-side).
+   - Authorised redirect URI: `https://<your-domain>/api/v1/auth/google/callback` (and `http://localhost:5173/api/v1/auth/google/callback` for local development through the Vite proxy).
+4. Copy the client id and secret into Render (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`); set `APP_BASE_URL` (or `GOOGLE_REDIRECT_URI`) to the same origin as the redirect URI.
+
+## 4b. Brevo setup (email)
+
+1. Create a Brevo account (free plan: 300 emails/day).
+2. **Senders, domains & dedicated IPs → Domains → Add a domain** you control, then add the DNS records Brevo shows at your DNS host:
+   - **SPF:** a TXT record on the root, e.g. `v=spf1 include:spf.brevo.com ~all` (merge with an existing SPF record; only one SPF record is allowed).
+   - **DKIM:** the TXT/CNAME record(s) Brevo gives (e.g. `brevo1._domainkey`).
+   - **DMARC:** a TXT record `_dmarc` such as `v=DMARC1; p=none; rua=mailto:dmarc@yourdomain.in` (tighten to `quarantine` once delivery looks healthy).
+   - Brevo's domain verification TXT record.
+3. Wait until Brevo shows the domain as authenticated, then add a sender (`EMAIL_FROM`) on that domain.
+4. **SMTP & API → API keys → Generate** and put it in `BREVO_API_KEY` on Render. Never commit it.
+5. Send yourself a test: register a student on the deployed site; the code should arrive within a minute (check spam the first time).
+
+Without your own domain you can verify a single sender address, but delivery to college inboxes is much worse without SPF/DKIM; use a domain for the pilot.
+
+## 4c. Rollout order for Phase 9
+
+1. Deploy Phase 9 with **all email and Google variables unset** (behaves as Phase 8).
+2. Run the backfill from your machine against production: set `MONGODB_URI` in `server/.env` to the production string, run `npm run ops:backfill-email-verified -w server` (prints counts; safe to re-run), then restore your local `MONGODB_URI`.
+3. Add `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (and `APP_BASE_URL`); redeploy; test Continue with Google with a test account.
+4. Add `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY`, `EMAIL_FROM`; redeploy. Verification is now required for new password sign-ups; test register → code → verify, and Forgot password.
+
+## 4d. Custom domain
+
+Render → service → **Settings → Custom Domains → Add**, then create the CNAME (or A/ALIAS for the root) Render shows; Render issues the TLS certificate. Afterwards update `CLIENT_ORIGINS`, `APP_BASE_URL`, the Google redirect URI (Google Cloud and `GOOGLE_REDIRECT_URI` if set) and the Google consent screen's authorised domain to the new domain, and redeploy.
 
 ## 5. Free-plan sleep and warming before a demo
 

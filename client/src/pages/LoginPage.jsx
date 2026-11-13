@@ -1,12 +1,20 @@
 import { KeyRound, LogIn } from 'lucide-react'
 import { useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
+import GoogleButton, { OrDivider } from '../components/GoogleButton.jsx'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import { Alert, Button, Card, ErrorAlert, TextField } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
+import usePolicies from '../hooks/usePolicies.js'
+
+// Fixed messages for the codes the Google callback may send back (never server text).
+const SIGN_IN_ERRORS = {
+  google_failed: 'Google sign-in did not work. Please try again, or sign in with your email and password.',
+  account_unavailable: 'This account cannot sign in. Contact your placement cell if you think this is a mistake.',
+}
 
 const POINTS = [
   { title: 'Check before you pay', body: 'Look up a UPI ID, website, email or phone number against what your placement cell has confirmed.' },
@@ -23,6 +31,9 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [showForgot, setShowForgot] = useState(false)
+  const [params] = useSearchParams()
+  const { googleEnabled, emailEnabled } = usePolicies()
+  const callbackError = SIGN_IN_ERRORS[params.get('error')] ?? ''
 
   if (!loading && user && !submitting) return <Navigate to={homePathForRole(user.role)} replace />
 
@@ -47,6 +58,13 @@ export default function LoginPage() {
   return (
     <AuthLayout eyebrow="Campus Recruitment Trust & Verification Desk" description="Check before you pay. Ask before you share." points={POINTS} title="Sign in">
       <Card>
+        {callbackError && <ErrorAlert message={callbackError} />}
+        {googleEnabled && (
+          <>
+            <GoogleButton intent="login" />
+            <OrDivider />
+          </>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <ErrorAlert message={error} />
           <TextField label="Email" type="email" autoComplete="username" required value={form.email} onChange={update('email')} />
@@ -56,16 +74,23 @@ export default function LoginPage() {
           </Button>
         </form>
         <div className="space-y-2 border-t border-slate-100 pt-4 text-sm">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 font-medium text-accent-700 hover:text-accent-800"
-            aria-expanded={showForgot}
-            onClick={() => setShowForgot((value) => !value)}
-          >
-            <KeyRound className="h-4 w-4" aria-hidden="true" />
-            Forgot password?
-          </button>
-          {showForgot && (
+          {emailEnabled ? (
+            <Link to="/forgot-password" className="inline-flex items-center gap-1.5 font-medium text-accent-700 hover:text-accent-800">
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+              Forgot password?
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 font-medium text-accent-700 hover:text-accent-800"
+              aria-expanded={showForgot}
+              onClick={() => setShowForgot((value) => !value)}
+            >
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+              Forgot password?
+            </button>
+          )}
+          {!emailEnabled && showForgot && (
             <Alert variant="info">Ask your placement cell to reset it. They will give you a temporary password.</Alert>
           )}
         </div>

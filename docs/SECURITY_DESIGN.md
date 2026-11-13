@@ -318,3 +318,35 @@ See [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md) for the test that proves each
 12. Allegations are never shown as confirmed fraud.
 13. Automated checks assist only.
 14. Cross-college isolation tests are required for every feature touching college-owned data (404 for another college's records).
+
+## Implemented in Phase 9
+
+### Google sign-in (OIDC, server-side code flow)
+
+- `GET /auth/google/start` creates `state` (32 bytes), `nonce` and a PKCE S256 verifier; they live only in the signed `os_oauth` cookie (httpOnly, SameSite=Lax, `Path=/api/v1/auth/google`, 10 minutes, HMAC-SHA256 with a key derived from `JWT_SECRET`, cookie name bound into the MAC). The query accepts only `intent=login|register`, so no redirect target can be injected.
+- The callback clears `os_oauth` first (single use), compares `state`, exchanges the code with the verifier at the fixed token URL, and verifies the ID token itself: RS256 signature against Google's JWKS (`crypto.createPublicKey({ format: 'jwk' })`), `iss` (`accounts.google.com` or `https://accounts.google.com`), `aud` = client id (and `azp` when several audiences), `exp`/`iat` with 60 s skew, `nonce`, `email_verified === true`. `alg: none` and unknown keys are rejected.
+- Every outcome redirects to a fixed internal path (`/student`, `/staff`, `/admin`, `/pending-approval`, `/register/google`, `/login?error=google_failed|account_unavailable`). Failures log an error code only, never the code, token or Google's response.
+- Unknown accounts get a signed `os_google_signup` cookie (`sub`, email, name, `hd`; 10 minutes). `POST /auth/google/complete` applies the same college, join-code, branch and domain checks as registration (`hd` may satisfy the domain rule) and creates a Google-only student (`passwordHash` null).
+- Linking by email is described in ADR-060; an account linked to another Google subject is never taken over. Disabled/rejected accounts get `account_unavailable`; a suspended college gets the generic failure.
+- Google-only accounts fail password login with the same generic 401; change-password returns `PASSWORD_NOT_SET`; a staff-assisted reset adds `password` to `authMethods`.
+
+### Email verification codes
+
+- 6 digits from `crypto.randomInt`, stored as HMAC-SHA256 (key derived from `JWT_SECRET` with its own label) over `userId:code`, so a stored hash is useless for any other account. 10-minute expiry, 5 attempts counted atomically before the comparison (`timingSafeEqual`), resend after 60 s and at most 5 per hour; a resend replaces the code. `emailOtp` is `select: false`.
+- `enforceEmailVerified` (inside the shared account-state gate) returns `403 EMAIL_NOT_VERIFIED` except for `/auth/me`, logout, change-password, verify-email and resend. It reads the per-app config, so it is off unless `REQUIRE_EMAIL_VERIFICATION` is on.
+
+### Self-service password reset
+
+- `POST /auth/forgot-password` always answers the same 202 at the same speed (work runs after the response). Limits: 20 per IP and 3 per address per hour.
+- Tokens: 32 random bytes (base64url), SHA-256 stored, 30 minutes, single use (claimed atomically), at most three active per user, TTL index on `expiresAt`. A successful reset increments `tokenVersion` (all sessions end), clears `mustChangePassword`, invalidates the other links, is audited (`auth.password_reset_self`, no token) and triggers a critical "password changed" email. The link carries the token in the fragment (ADR-063).
+
+### Email content and delivery
+
+- Only `services/email/templates.js` produces email text, from allow-listed fields (`name`, `code`, `link`, `caseNumber`, `claimedCompany`, `advisoryTitle`, `severity`); everything in HTML is escaped and line breaks are stripped from subjects. Emails never include the decision message or basis, notes, recommendations, signals, related cases or other students' data; case emails only say that something happened and link to the page.
+- Recipients must be active and verified; opted-out users are recorded as `skipped_pref`. `EmailLog` never stores bodies, addresses, codes, links or tokens.
+- Sending happens after the API response; failures are logged by code and never change the response.
+
+### Configuration guards
+
+- Production refuses to start with `REQUIRE_EMAIL_VERIFICATION=true` and `EMAIL_PROVIDER=log`, with `brevo` but no `BREVO_API_KEY`/`EMAIL_FROM`, or with only one of `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`. Errors name keys, never values.
+- Outbound calls: only `https://oauth2.googleapis.com/token`, `https://www.googleapis.com/oauth2/v3/certs` and `https://api.brevo.com/v3/smtp/email`. CSP is unchanged.

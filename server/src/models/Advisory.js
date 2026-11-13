@@ -32,6 +32,11 @@ const advisorySchema = new mongoose.Schema(
     publishedAt: { type: Date, default: null },
     // Number of students notified at publish time (denominator of the acknowledgement rate).
     audienceCountAtPublish: { type: Number, min: 0, default: null },
+    // Email fan-out at publish (critical/warning only): emailed of notified students. Filled asynchronously.
+    emailStats: {
+      sent: { type: Number, min: 0, default: null },
+      audience: { type: Number, min: 0, default: null },
+    },
     withdrawnBy: { type: ObjectId, ref: 'User', default: null },
     withdrawnAt: { type: Date, default: null },
     withdrawReason: { type: String, maxlength: 500, default: null },

@@ -124,6 +124,16 @@ describe('CaseQueuePage', () => {
     expect(within(row).getByText('High')).toBeInTheDocument()
     expect(within(row).getByText('Stale')).toBeInTheDocument()
     expect(within(row).getByText('Unassigned')).toBeInTheDocument()
+    // G23: below 1600 px Channel and Last activity fold under the company (jsdom checks the classes;
+    // the real widths 1366/1440/1600 are checked in the browser smoke).
+    const table = row.closest('table')
+    for (const name of ['Channel', 'Last activity']) {
+      expect(within(table).getByRole('columnheader', { name })).toHaveClass('hidden', 'min-[1600px]:table-cell')
+    }
+    const company = within(row).getByText('Fast Hiring Pvt Ltd').closest('td')
+    expect(within(company).getByText('WhatsApp')).toBeInTheDocument()
+    expect(within(company).getByText('· no recent activity')).toBeInTheDocument()
+    expect(within(company).getByText('WhatsApp').closest('div')).toHaveClass('min-[1600px]:hidden')
     expect(listStaffCases).toHaveBeenLastCalledWith({ status: 'open', page: 1, limit: 20 })
 
     await user.selectOptions(screen.getByLabelText('Priority'), 'high')

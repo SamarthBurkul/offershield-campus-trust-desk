@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
-import { approveStudent, bulkApproveStudents, listStudents, rejectStudent, resetUserPassword, setStudentStatus } from '../api/students.js'
+import { approveStudent, bulkApproveStudents, listStudents, promoteYear, rejectStudent, resetUserPassword, setStudentStatus } from '../api/students.js'
+import { ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
-import { Check, CheckCheck, Filter, Hourglass, KeyRound, UserCheck, UserX, Users, X } from 'lucide-react'
+import { ArrowUpCircle, Check, CheckCheck, Filter, Hourglass, KeyRound, UserCheck, UserX, Users, X } from 'lucide-react'
 import { useNavCounts } from '../components/layout/navCountsContext.js'
-import { Avatar, Button, EmptyState, ErrorAlert, OneTimeSecret, PageHeader, SelectField, Skeleton, Table, Tabs, TBody, Td, TextAreaField, TextField, Th, THead, Tr, useToast, Card } from '../components/ui/index.js'
+import { Avatar, Badge, Button, EmptyState, ErrorAlert, OneTimeSecret, PageHeader, SelectField, Skeleton, Table, Tabs, TBody, Td, TextAreaField, TextField, Th, THead, Tr, useToast, Card } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 import { formatDateTime, relativeTime } from '../utils/format.js'
 
@@ -41,9 +42,65 @@ function RejectDialog({ student, onReject, onCancel }) {
   )
 }
 
+/**
+ * TPO head: academic-year upkeep. Shows how many active students are in the chosen year before
+ * moving them all up one year (run once after results each June, final year first).
+ */
+function PromoteYearDialog({ onCancel, onDone }) {
+  const [fromYear, setFromYear] = useState('4')
+  // The count belongs to the year it was fetched for, so a stale count is never shown.
+  const [counted, setCounted] = useState({ year: null, total: 0 })
+  const count = counted.year === fromYear ? counted.total : null
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    Promise.resolve()
+      .then(() => listStudents({ status: 'active', year: Number(fromYear), limit: 1 }))
+      .then((data) => active && setCounted({ year: fromYear, total: data?.total ?? 0 }))
+      .catch(() => active && setCounted({ year: fromYear, total: 0 }))
+    return () => {
+      active = false
+    }
+  }, [fromYear])
+
+  async function confirm() {
+    if (count === null) return
+    setBusy(true)
+    setError('')
+    try {
+      onDone(await promoteYear(Number(fromYear)))
+    } catch (err) {
+      setError(errorMessage(err))
+      setBusy(false)
+    }
+  }
+
+  const to = Number(fromYear) + 1
+  return (
+    <ConfirmDialog title="Promote students to the next year" confirmLabel={`Promote to year ${to}`} busy={busy} onConfirm={confirm} onCancel={onCancel}>
+      <ErrorAlert message={error} />
+      <SelectField label="Students now in" value={fromYear} onChange={(event) => setFromYear(event.target.value)}>
+        {[4, 3, 2, 1].map((year) => (
+          <option key={year} value={year}>
+            Year {year}
+          </option>
+        ))}
+      </SelectField>
+      <p className="text-sm text-slate-700">
+        {count === null ? 'Counting students…' : `${count} active student${count === 1 ? '' : 's'} in year ${fromYear} will move to year ${to}.`}
+      </p>
+      <p className="text-xs text-slate-500">Run after results each June, starting with the final year so nobody is promoted twice.</p>
+    </ConfirmDialog>
+  )
+}
+
 export default function StaffStudentsPage() {
   usePageTitle('Students')
-  const { college } = useAuth()
+  const { college, user } = useAuth()
+  const isHead = user?.role === ROLES.TPO_HEAD
+  const [promoting, setPromoting] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = TABS.find((item) => item.value === searchParams.get('tab')) ?? (college?.studentVerification === 'manual_approval' ? TABS[0] : TABS[1])
   const [filters, setFilters] = useState({ q: '', year: '', branch: '' })
@@ -119,6 +176,13 @@ export default function StaffStudentsPage() {
           college?.studentVerification === 'manual_approval'
             ? 'Your college approves each student registration. Check new registrations against your enrolment list.'
             : 'Students register with a college email address and the join code.'
+        }
+        actions={
+          isHead && (
+            <Button variant="secondary" icon={ArrowUpCircle} onClick={() => setPromoting(true)}>
+              Promote year
+            </Button>
+          )
         }
       />
 
@@ -201,6 +265,7 @@ export default function StaffStudentsPage() {
                 )}
                 <Th>Student</Th>
                 <Th>Year · Branch</Th>
+                <Th>Sign-in</Th>
                 <Th>Registered</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
@@ -231,6 +296,12 @@ export default function StaffStudentsPage() {
                   <Td className="whitespace-nowrap text-slate-700">
                     {student.year} · {student.branch}
                   </Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-1.5">
+                      {student.emailVerified === false ? <Badge tone="warning">Email not verified</Badge> : <Badge tone="info">Verified email</Badge>}
+                      <Badge>{(student.authMethods ?? ['password']).includes('google') ? 'Google' : 'Password'}</Badge>
+                    </div>
+                  </Td>
                   <Td className="whitespace-nowrap text-slate-600">
                     <span title={formatDateTime(student.createdAt)}>{relativeTime(student.createdAt)}</span>
                   </Td>
@@ -242,7 +313,8 @@ export default function StaffStudentsPage() {
                             size="sm"
                             variant="success"
                             icon={Check}
-                            disabled={busyId === student.id}
+                            disabled={busyId === student.id || student.emailVerified === false}
+                            title={student.emailVerified === false ? 'The student must verify their email address first' : undefined}
                             onClick={() => run(student.id, () => approveStudent(student.id), () => `${student.name} approved.`)}
                           >
                             Approve
@@ -282,6 +354,17 @@ export default function StaffStudentsPage() {
           </Table>
         )}
       </Card>
+
+      {promoting && (
+        <PromoteYearDialog
+          onCancel={() => setPromoting(false)}
+          onDone={(value) => {
+            setPromoting(false)
+            toast.success(`${value.promoted} student${value.promoted === 1 ? '' : 's'} moved from year ${value.fromYear} to year ${value.toYear}.`)
+            reload()
+          }}
+        />
+      )}
 
       {rejecting && (
         <RejectDialog

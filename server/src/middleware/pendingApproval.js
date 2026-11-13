@@ -4,7 +4,14 @@ const AppError = require('../utils/AppError');
 
 const API_PREFIX = '/api/v1';
 // The only requests a restricted account (temporary password, or awaiting approval) may make.
-const ALLOWED = new Set(['GET /auth/me', 'POST /auth/change-password', 'POST /auth/logout']);
+const ALLOWED = new Set([
+  'GET /auth/me',
+  'POST /auth/change-password',
+  'POST /auth/logout',
+  // A pending student may still confirm their email address while waiting.
+  'POST /auth/verify-email',
+  'POST /auth/resend-verification',
+]);
 
 /** "METHOD /path" relative to /api/v1, without the query string or a trailing slash. */
 function routeKey(req) {
@@ -26,4 +33,4 @@ function enforceApproved(req, _res, next) {
   next();
 }
 
-module.exports = { enforceApproved, isAllowedWhileRestricted };
+module.exports = { enforceApproved, isAllowedWhileRestricted, routeKey };

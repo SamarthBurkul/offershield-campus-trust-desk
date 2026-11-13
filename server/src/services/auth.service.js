@@ -11,6 +11,7 @@ const { toSafeUser, idOf } = require('../utils/safeUser');
 const audit = require('./audit.service');
 const notifications = require('./notifications/notify');
 const { POLICIES_VERSION } = require('../constants/policies');
+const emailVerification = require('./emailVerification.service');
 
 const invalidCredentials = () => new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
 const registrationRejected = () =>
@@ -38,7 +39,7 @@ async function isCollegeActive(collegeId) {
   return Boolean(college && college.status === 'active');
 }
 
-async function register(input, { ip }) {
+async function register(input, { ip, config }) {
   const college = await College.findOne({ code: input.collegeCode, status: 'active' }).select('+studentJoinCodeHash');
   const joinCode = normalizeJoinCode(input.joinCode);
   // Always run one bcrypt comparison so a missing college is not faster than a wrong code.
@@ -47,6 +48,8 @@ async function register(input, { ip }) {
     : await verifyAgainstDummy(joinCode);
   const domain = input.email.split('@')[1];
   const manualApproval = college?.studentVerification === 'manual_approval';
+  // With a real email provider, a password sign-up must confirm a code; otherwise it counts as verified.
+  const requireVerification = Boolean(config?.email?.requireVerification);
 
   // Colleges without student email addresses accept any address; staff then approve each student.
   if (!college || !joinCodeMatches || (!manualApproval && !college.emailDomains.includes(domain))) {
@@ -64,6 +67,8 @@ async function register(input, { ip }) {
       name: input.name,
       email: input.email,
       passwordHash: await hashPassword(input.password),
+      authMethods: ['password'],
+      emailVerifiedAt: requireVerification ? null : new Date(),
       year: input.year,
       branch: input.branch,
       mustChangePassword: false,
@@ -87,6 +92,8 @@ async function register(input, { ip }) {
     ip,
   });
 
+  if (requireVerification) await emailVerification.issueCode(user, config);
+
   if (manualApproval) {
     // Template text only: no name or email in the notification.
     await notifications.notifySafely(college._id, await notifications.activeStaffIds(college._id), {
@@ -103,7 +110,8 @@ async function register(input, { ip }) {
 
 async function login({ email, password }) {
   const user = await User.findOne({ email }).select('+passwordHash');
-  const passwordMatches = user ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password);
+  // Google-only accounts have no password: they fail exactly like a wrong password.
+  const passwordMatches = user?.passwordHash ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password);
 
   // Unknown email, wrong password, disabled or rejected account and suspended college look identical.
   // A pending student may sign in, but only reaches the "waiting for approval" page.
@@ -149,6 +157,7 @@ async function getCurrentSession(sessionUser) {
 async function changePassword(sessionUser, { currentPassword, newPassword }, { ip }) {
   const user = await User.findById(sessionUser.id).select('+passwordHash');
   if (!user) throw new AppError(401, 'UNAUTHENTICATED', 'Authentication required');
+  if (!user.passwordHash) throw new AppError(400, 'PASSWORD_NOT_SET', 'This account signs in with Google and has no password');
 
   if (!(await verifyPassword(currentPassword, user.passwordHash))) {
     throw new AppError(400, 'INVALID_CURRENT_PASSWORD', 'Current password is incorrect');

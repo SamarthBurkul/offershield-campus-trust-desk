@@ -38,6 +38,7 @@ async function main() {
     email,
     passwordHash: await hashPassword(superadminPassword),
     mustChangePassword: false,
+    emailVerifiedAt: new Date(),
   });
   console.log('[seed:superadmin] Super admin created (email and password taken from server/.env).');
 }

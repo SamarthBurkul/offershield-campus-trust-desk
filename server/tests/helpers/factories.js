@@ -34,7 +34,8 @@ async function createUser({ college = null, role, email, password = TEST_PASSWOR
     role,
     name: `${role} ${email}`,
     email,
-    passwordHash: await cachedHash(password),
+    passwordHash: password === null ? null : await cachedHash(password),
+    emailVerifiedAt: new Date(),
     ...studentDefaults,
     ...rest,
   });

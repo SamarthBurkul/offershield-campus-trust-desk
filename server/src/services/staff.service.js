@@ -23,7 +23,12 @@ async function issueTemporaryPassword(target, actor, { ip }) {
   const temporaryPassword = generateTemporaryPassword();
   await userRepository.forTenant(target.collegeId).updateOne(
     { _id: target._id },
-    { $set: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true }, $inc: { tokenVersion: 1 } },
+    // A Google-only account gains password sign-in as well.
+    {
+      $set: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true },
+      $addToSet: { authMethods: 'password' },
+      $inc: { tokenVersion: 1 },
+    },
   );
 
   await audit.record({
@@ -80,6 +85,8 @@ async function createStaffAccount({ college, role, name, email, actor, ip }) {
       email,
       passwordHash: await hashPassword(temporaryPassword),
       mustChangePassword: true,
+      // Staff addresses are set by the TPO head / super admin, so they count as verified.
+      emailVerifiedAt: new Date(),
     });
   } catch (err) {
     if (err && err.code === 11000) throw new AppError(409, 'EMAIL_TAKEN', 'An account with this email already exists');
