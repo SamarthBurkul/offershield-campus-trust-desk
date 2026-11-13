@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { VERIFICATION_METHOD_LABELS } from '../constants/verificationMethods.js'
 import { splitList } from '../utils/lists.js'
-import { Button, CheckboxField, ErrorAlert, TextAreaField, TextField } from './ui.jsx'
+import { Alert, Button, CheckboxField, ErrorAlert, TextAreaField, TextField } from './ui/index.js'
 
 const toggle = (list, value) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value])
 
@@ -55,23 +55,24 @@ export default function RecruiterForm({ initial = {}, onSubmit, onCancel, isHead
 
   return (
     <form onSubmit={submit} className="space-y-4" aria-label="Recruiter form" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField label="Company name" value={form.companyName} onChange={field('companyName')} />
         <TextField label="Official domains" hint="Comma-separated, e.g. infosys.com" value={form.domains} onChange={field('domains')} />
         <TextField label="Contact emails" hint="Must use the domains above; no gmail etc." value={form.contactEmails} onChange={field('contactEmails')} />
         <TextField label="Contact phones" hint="Comma-separated" value={form.contactPhones} onChange={field('contactPhones')} />
       </div>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-slate-700">Verification methods</legend>
+      <fieldset className="space-y-2 rounded-xl bg-slate-50 p-4 ring-1 ring-inset ring-slate-200">
+        <legend className="sr-only">Verification methods</legend>
+        <p className="text-sm font-medium text-slate-700" aria-hidden="true">Verification methods</p>
         {Object.entries(VERIFICATION_METHOD_LABELS).map(([value, label]) => (
           <CheckboxField key={value} label={label} checked={form.methods.includes(value)} onChange={() => set({ methods: toggle(form.methods, value) })} />
         ))}
       </fieldset>
       <TextAreaField label="Evidence note" rows={3} hint="What you checked and where (20–2000 characters)." value={form.evidenceNote} onChange={field('evidenceNote')} />
       <TextField label="Valid for (days)" type="number" min="30" max="730" value={form.expiresInDays} onChange={field('expiresInDays')} />
-      {!isHead && <p className="text-sm text-slate-600">Your TPO head must approve this record before students see it as verified.</p>}
+      {!isHead && <Alert variant="info">Your TPO head must approve this record before students see it as verified.</Alert>}
       {problems.length > 0 && (
-        <ul className="list-disc pl-5 text-sm text-amber-800" aria-label="Missing recruiter details">
+        <ul className="list-disc space-y-1 rounded-xl bg-amber-50 py-2.5 pl-8 pr-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20" aria-label="Missing recruiter details">
           {problems.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
@@ -79,7 +80,7 @@ export default function RecruiterForm({ initial = {}, onSubmit, onCancel, isHead
       )}
       <ErrorAlert message={error} />
       <div className="flex gap-3">
-        <Button type="submit" disabled={busy || problems.length > 0}>
+        <Button type="submit" loading={busy} disabled={problems.length > 0}>
           {busy ? 'Saving…' : isHead ? 'Save verified recruiter' : 'Submit for approval'}
         </Button>
         {onCancel && (

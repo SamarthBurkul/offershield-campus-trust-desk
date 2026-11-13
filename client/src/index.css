@@ -1,1 +1,105 @@
 @import 'tailwindcss';
+
+/*
+ * OfferShield design tokens (Phase 8, docs/DESIGN_SYSTEM.md).
+ * brand  = deep navy chrome (sidebar, top bar, hero bands)
+ * accent = royal-blue action colour (primary buttons, links, focus)
+ * Semantic meaning uses Tailwind's emerald / amber / rose / sky / slate scales only.
+ */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --color-brand-50: #eef2fb;
+  --color-brand-100: #dce4f6;
+  --color-brand-200: #b9c8ec;
+  --color-brand-300: #8da4dd;
+  --color-brand-400: #5d7bc9;
+  --color-brand-500: #3a5ab4;
+  --color-brand-600: #2a4596;
+  --color-brand-700: #1f3576;
+  --color-brand-800: #172957;
+  --color-brand-900: #111e40;
+  --color-brand-950: #0a1630;
+
+  --color-accent-50: #eef3ff;
+  --color-accent-100: #dce6ff;
+  --color-accent-200: #b3c8ff;
+  --color-accent-300: #84a3ff;
+  --color-accent-400: #5a7ffb;
+  --color-accent-500: #3b62f2;
+  --color-accent-600: #2a4ddb;
+  --color-accent-700: #233fb5;
+  --color-accent-800: #213791;
+  --color-accent-900: #1f3273;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-overlay: 0 24px 48px -12px rgb(15 23 42 / 0.28);
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-slide-in-right: slide-in-right 200ms ease-out;
+  --animate-slide-in-left: slide-in-left 200ms ease-out;
+  --animate-pop-in: pop-in 160ms ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-slate-50 font-sans text-slate-800;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-500;
+  }
+  ::selection {
+    @apply bg-accent-100 text-brand-950;
+  }
+}
+
+/* Gradient hero band used by the landing page, auth pages and student home. */
+@utility hero-band {
+  background-image:
+    radial-gradient(60rem 30rem at 85% -10%, rgb(59 98 242 / 0.35), transparent 60%),
+    radial-gradient(40rem 24rem at 0% 110%, rgb(58 90 180 / 0.35), transparent 60%),
+    linear-gradient(160deg, var(--color-brand-950) 0%, var(--color-brand-900) 55%, var(--color-brand-800) 100%);
+}
+
+/* Long-form reading (privacy, terms). */
+@utility prose-doc {
+  & h2 { @apply mt-8 scroll-mt-24 text-lg font-semibold tracking-tight text-slate-900; }
+  & p, & li { @apply text-[15px] leading-7 text-slate-700; }
+  & ul { @apply mt-2 list-disc space-y-2 pl-5; }
+  & a { @apply font-medium text-accent-700 underline decoration-accent-200 underline-offset-2 hover:decoration-accent-600; }
+  & strong { @apply font-semibold text-slate-900; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

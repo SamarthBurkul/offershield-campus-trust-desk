@@ -2,7 +2,7 @@
 
 OfferShield is a Campus Recruitment Trust & Verification Desk for colleges. Students can search their college's reviewed recruiter records and confirmed suspicious indicators, and submit structured verification requests, with evidence, for suspicious external job or internship offers. Placement staff investigate each request as a case, the TPO head records the final decision with reasons, confirmed findings go into the college's registry, and the TPO publishes targeted advisories to students. It is multi-tenant (one tenant = one college) and is **not** a scam-detecting AI, placement ERP, job portal, recruiter marketplace or ATS — automated checks only assist staff and never decide whether an offer is genuine.
 
-> **Status:** Phases 1–6 passed review; Phase 7 (pilot readiness, production build, demo college) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
+> **Status:** Phases 1–7 passed review; Phase 8 (premium UI redesign) implemented — awaiting architect review. See [docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).
 >
 > **Live demo:** <URL> (to be added after the Render deployment)
 
@@ -21,6 +21,20 @@ Pilot features (Phase 7):
 - **Privacy notice and terms** with recorded consent; evidence **retention** script.
 - **One production service:** Express serves the built client with a strict CSP, HSTS, caching and compression; JSON request logs with request ids; readiness check for Render.
 - **Showcase demo college** ("Demo Institute of Technology") with six weeks of realistic, anonymised activity, resettable with one command.
+
+## Screenshots
+
+Showcase data ("Demo Institute of Technology"; every person and scam contact is fictional). More in [docs/screenshots/](docs/screenshots/), at 1440 × 900 and 390 × 844.
+
+| Landing | Student home: confirmed-fraud lookup |
+| --- | --- |
+| ![Landing page](docs/screenshots/landing-1440.png) | ![Student lookup result on a phone](docs/screenshots/student-home-fraud-390.png) |
+| **Staff home** | **Case detail** |
+| ![Staff home with needs-attention panels](docs/screenshots/staff-home-1440.png) | ![Staff case detail](docs/screenshots/case-detail-1440.png) |
+| **Case desk** | **Statistics** |
+| ![Case desk](docs/screenshots/case-desk-1440.png) | ![Statistics](docs/screenshots/stats-1440.png) |
+
+The design system is documented in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
 Guides: [placement cell](docs/GUIDE_PLACEMENT_CELL.md) · [students](docs/GUIDE_STUDENT.md) · [deployment](docs/DEPLOYMENT.md) · [operations](docs/OPERATIONS.md)
 
@@ -116,7 +130,8 @@ offershield-campus-trust-desk/
       api/client.js     the single axios instance
       api/              auth, admin, staff, health
       auth/             AuthProvider, useAuth, roles
-      components/       Layout, ProtectedRoute, HealthStatus, ui
+      components/       Layout (shell choice), layout/ (public, student and staff shells), ui/ (design system), domain components
+      utils/format.js   the only date / money formatter (en-IN)
       pages/            login, register, change password, student/staff/admin pages
       routes/           AppRoutes
       __tests__/        Vitest + Testing Library
@@ -132,6 +147,7 @@ offershield-campus-trust-desk/
 - [Decisions (ADRs)](docs/DECISIONS.md)
 - [Phase status](docs/PHASE_STATUS.md)
 - [Security checklist](docs/SECURITY_CHECKLIST.md)
+- [Design system](docs/DESIGN_SYSTEM.md)
 - [Deployment (Render + Atlas)](docs/DEPLOYMENT.md)
 - [Operations](docs/OPERATIONS.md)
 - [Guide for the placement cell](docs/GUIDE_PLACEMENT_CELL.md)

@@ -1,5 +1,6 @@
 import { useId } from 'react'
-import { Button } from './ui.jsx'
+import { Plus, X } from 'lucide-react'
+import { Button, IconButton, Input } from './ui/index.js'
 
 /** Editable list of short text values (links, emails, phones, UPI IDs) with add/remove buttons. */
 export default function ListInput({ label, values, onChange, max, placeholder, type = 'text', hint }) {
@@ -12,22 +13,19 @@ export default function ListInput({ label, values, onChange, max, placeholder, t
       <legend className="text-sm font-medium text-slate-700">{label}</legend>
       {values.map((value, index) => (
         <div key={index} className="flex gap-2">
-          <input
+          <Input
             id={`${id}-${index}`}
             type={type}
             aria-label={`${label} ${index + 1}`}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
             placeholder={placeholder}
             value={value}
             onChange={(event) => update(index, event.target.value)}
           />
-          <Button variant="secondary" aria-label={`Remove ${label} ${index + 1}`} onClick={() => remove(index)}>
-            Remove
-          </Button>
+          <IconButton icon={X} variant="secondary" label={`Remove ${label} ${index + 1}`} onClick={() => remove(index)} />
         </div>
       ))}
       {values.length < max && (
-        <Button variant="secondary" onClick={() => onChange([...values, ''])}>
+        <Button variant="ghost" size="sm" icon={Plus} onClick={() => onChange([...values, ''])}>
           Add {label.toLowerCase().replace(/s$/, '')}
         </Button>
       )}

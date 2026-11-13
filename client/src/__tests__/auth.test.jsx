@@ -121,9 +121,12 @@ describe('Layout', () => {
 
     renderAt('/staff')
 
+    // Phase 8: the staff shell replaces the public frame once the session loads; Log out lives in the account menu.
+    const menuButton = await screen.findByRole('button', { name: /account menu/i })
     const header = within(screen.getByRole('banner'))
-    expect(await header.findByRole('button', { name: /log out/i })).toBeInTheDocument()
     expect(header.getByText('Asha Rao')).toBeInTheDocument()
     expect(header.getByText(/placement officer/i)).toBeInTheDocument()
+    await userEvent.setup().click(menuButton)
+    expect(screen.getByRole('menuitem', { name: /log out/i })).toBeInTheDocument()
   })
 })

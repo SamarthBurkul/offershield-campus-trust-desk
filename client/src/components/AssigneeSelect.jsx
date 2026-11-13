@@ -1,7 +1,8 @@
 import { useEffect, useId, useState } from 'react'
 import { listStaffMembers } from '../api/staff.js'
 import { ROLE_LABELS, ROLES } from '../auth/roles.js'
-import { Button } from './ui.jsx'
+import { UserCheck, UserMinus } from 'lucide-react'
+import { Avatar, Button } from './ui/index.js'
 
 /**
  * TPO head: choose any active staff member. Placement officer: "Assign to me" / "Unassign" only.
@@ -26,7 +27,8 @@ export default function AssigneeSelect({ user, assignee, disabled, onAssign }) {
   if (isHead) {
     return (
       <div className="flex items-center gap-2 text-sm">
-        <label htmlFor={id} className="font-medium text-slate-700">
+        {assignee && <Avatar name={assignee.name} size="sm" />}
+        <label htmlFor={id} className="font-medium text-slate-600">
           Assignee
         </label>
         <select
@@ -34,7 +36,7 @@ export default function AssigneeSelect({ user, assignee, disabled, onAssign }) {
           disabled={disabled}
           value={assignee?.id ?? ''}
           onChange={(event) => onAssign(event.target.value || null)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-slate-900"
+          className="h-9 w-full max-w-[13rem] min-w-0 rounded-xl border-0 bg-white pl-3 pr-8 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:ring-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:bg-slate-50 disabled:text-slate-500"
         >
           <option value="">Unassigned</option>
           {assignee && !staff.some((member) => member.id === assignee.id) && <option value={assignee.id}>{assignee.name}</option>}
@@ -51,16 +53,17 @@ export default function AssigneeSelect({ user, assignee, disabled, onAssign }) {
   const mine = assignee?.id === user.id
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="text-slate-700">
+      {assignee && <Avatar name={assignee.name} size="sm" />}
+      <span className="text-slate-600">
         Assignee: <span className="font-medium text-slate-900">{assignee ? (mine ? 'You' : assignee.name) : 'Unassigned'}</span>
       </span>
       {!mine && (
-        <Button variant="secondary" disabled={disabled} onClick={() => onAssign(user.id)}>
+        <Button variant="secondary" size="sm" icon={UserCheck} disabled={disabled} onClick={() => onAssign(user.id)}>
           Assign to me
         </Button>
       )}
       {mine && (
-        <Button variant="secondary" disabled={disabled} onClick={() => onAssign(null)}>
+        <Button variant="secondary" size="sm" icon={UserMinus} disabled={disabled} onClick={() => onAssign(null)}>
           Unassign
         </Button>
       )}

@@ -4,16 +4,16 @@ import { errorMessage } from '../api/errors.js'
 import { approveStudent, bulkApproveStudents, listStudents, rejectStudent, resetUserPassword, setStudentStatus } from '../api/students.js'
 import { useAuth } from '../auth/useAuth.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
-import EmptyState from '../components/EmptyState.jsx'
-import Skeleton from '../components/Skeleton.jsx'
-import { Button, Card, ErrorAlert, OneTimeSecret, SelectField, TextAreaField, TextField } from '../components/ui.jsx'
+import { Check, CheckCheck, Filter, Hourglass, KeyRound, UserCheck, UserX, Users, X } from 'lucide-react'
+import { useNavCounts } from '../components/layout/navCountsContext.js'
+import { Avatar, Button, EmptyState, ErrorAlert, OneTimeSecret, PageHeader, SelectField, Skeleton, Table, Tabs, TBody, Td, TextAreaField, TextField, Th, THead, Tr, useToast, Card } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
-import { relativeTime } from '../utils/time.js'
+import { formatDateTime, relativeTime } from '../utils/format.js'
 
 const TABS = [
-  { value: 'pending', status: 'pending_approval', label: 'Pending' },
-  { value: 'active', status: 'active', label: 'Active' },
-  { value: 'disabled', status: 'disabled', label: 'Disabled' },
+  { value: 'pending', status: 'pending_approval', label: 'Pending', icon: Hourglass },
+  { value: 'active', status: 'active', label: 'Active', icon: UserCheck },
+  { value: 'disabled', status: 'disabled', label: 'Disabled', icon: UserX },
 ]
 
 function RejectDialog({ student, onReject, onCancel }) {
@@ -51,7 +51,8 @@ export default function StaffStudentsPage() {
   const [result, setResult] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
-  const [notice, setNotice] = useState('')
+  const toast = useToast()
+  const { publish } = useNavCounts()
   const [selected, setSelected] = useState([])
   const [busyId, setBusyId] = useState(null)
   const [rejecting, setRejecting] = useState(null)
@@ -67,12 +68,13 @@ export default function StaffStudentsPage() {
         if (!active) return
         setResult({ ...data, tab: tab.value })
         setLoadError('')
+        publish({ pendingStudents: data.pendingCount })
       })
       .catch((err) => active && setLoadError(errorMessage(err, 'Could not load students.')))
     return () => {
       active = false
     }
-  }, [tab.status, tab.value, query, reloadKey])
+  }, [tab.status, tab.value, query, reloadKey, publish])
 
   const students = result?.tab === tab.value ? result.students : null
   const reload = () => {
@@ -82,18 +84,16 @@ export default function StaffStudentsPage() {
 
   function chooseTab(value) {
     setSelected([])
-    setNotice('')
     setActionError('')
     setSearchParams({ tab: value })
   }
 
   async function run(id, action, message) {
     setActionError('')
-    setNotice('')
     setBusyId(id)
     try {
       const value = await action()
-      if (message) setNotice(message(value))
+      if (message) toast.success(message(value))
       reload()
       return value
     } catch (err) {
@@ -113,40 +113,28 @@ export default function StaffStudentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-slate-900">Students</h1>
-        <p className="text-sm text-slate-600">
-          {college?.studentVerification === 'manual_approval'
+      <PageHeader
+        title="Students"
+        description={
+          college?.studentVerification === 'manual_approval'
             ? 'Your college approves each student registration. Check new registrations against your enrolment list.'
-            : 'Students register with a college email address and the join code.'}
-        </p>
-      </div>
+            : 'Students register with a college email address and the join code.'
+        }
+      />
 
-      {secret && (
-        <OneTimeSecret label={`Temporary password for ${secret.email}`} value={secret.password} onDismiss={() => setSecret(null)} />
-      )}
+      {secret && <OneTimeSecret label={`Temporary password for ${secret.email}`} value={secret.password} onDismiss={() => setSecret(null)} />}
 
-      <div role="tablist" aria-label="Student status" className="flex flex-wrap gap-2">
-        {TABS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            role="tab"
-            aria-selected={item.value === tab.value}
-            onClick={() => chooseTab(item.value)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium ${
-              item.value === tab.value ? 'bg-blue-700 text-white' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {item.label}
-            {item.value === 'pending' && result?.pendingCount ? ` (${result.pendingCount})` : ''}
-          </button>
-        ))}
-      </div>
-
-      <Card>
+      <Card padded={false}>
+        <div className="px-5 pt-2">
+          <Tabs
+            label="Student status"
+            value={tab.value}
+            onChange={chooseTab}
+            tabs={TABS.map((item) => ({ value: item.value, label: item.label, icon: item.icon, count: item.value === 'pending' && result?.pendingCount ? result.pendingCount : undefined }))}
+          />
+        </div>
         <form
-          className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-end"
+          className="grid grid-cols-1 gap-3 border-b border-slate-100 px-5 py-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
           onSubmit={(event) => {
             event.preventDefault()
             setQuery(filters)
@@ -169,111 +157,129 @@ export default function StaffStudentsPage() {
               </option>
             ))}
           </SelectField>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" icon={Filter}>
             Apply
           </Button>
         </form>
 
-        <ErrorAlert message={loadError || actionError} />
-        {notice && <p className="text-sm text-emerald-700">{notice}</p>}
-
-        {tab.value === 'pending' && students?.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              disabled={selected.length === 0 || busyId === 'bulk'}
-              onClick={() =>
-                run('bulk', () => bulkApproveStudents(selected), (value) => `${value.approved.length} student${value.approved.length === 1 ? '' : 's'} approved.`)
-              }
-            >
-              Approve selected ({selected.length})
-            </Button>
-            <Button variant="secondary" onClick={() => setSelected(selected.length === students.length ? [] : students.map((student) => student.id))}>
-              {selected.length === students.length ? 'Clear selection' : 'Select all'}
-            </Button>
-          </div>
-        )}
-
-        {students === null && !loadError && <Skeleton rows={4} label="Loading students" />}
-        {students?.length === 0 && (
-          <EmptyState title={tab.value === 'pending' ? 'No students are waiting for approval' : `No ${tab.label.toLowerCase()} students`}>
-            {query.q || query.year || query.branch ? 'Try clearing the filters.' : null}
-          </EmptyState>
-        )}
+        <div className="space-y-4 p-5 empty:hidden">
+          <ErrorAlert message={loadError || actionError} />
+          {tab.value === 'pending' && students?.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-inset ring-slate-200">
+              <Button
+                size="sm"
+                variant="success"
+                icon={CheckCheck}
+                disabled={selected.length === 0}
+                loading={busyId === 'bulk'}
+                onClick={() =>
+                  run('bulk', () => bulkApproveStudents(selected), (value) => `${value.approved.length} student${value.approved.length === 1 ? '' : 's'} approved.`)
+                }
+              >
+                Approve selected ({selected.length})
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(selected.length === students.length ? [] : students.map((student) => student.id))}>
+                {selected.length === students.length ? 'Clear selection' : 'Select all'}
+              </Button>
+            </div>
+          )}
+          {students === null && !loadError && <Skeleton rows={4} label="Loading students" />}
+          {students?.length === 0 && (
+            <EmptyState icon={Users} title={tab.value === 'pending' ? 'No students are waiting for approval' : `No ${tab.label.toLowerCase()} students`}>
+              {query.q || query.year || query.branch ? 'Try clearing the filters.' : null}
+            </EmptyState>
+          )}
+        </div>
         {students?.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-slate-500">
-                <tr>
-                  {tab.value === 'pending' && <th className="py-2 pr-2 font-medium"><span className="sr-only">Select</span></th>}
-                  <th className="py-2 pr-4 font-medium">Name</th>
-                  <th className="py-2 pr-4 font-medium">Email</th>
-                  <th className="py-2 pr-4 font-medium">Year · Branch</th>
-                  <th className="py-2 pr-4 font-medium">Registered</th>
-                  <th className="py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {students.map((student) => (
-                  <tr key={student.id}>
-                    {tab.value === 'pending' && (
-                      <td className="py-2 pr-2">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${student.name}`}
-                          className="h-4 w-4 rounded border-slate-300"
-                          checked={selected.includes(student.id)}
-                          onChange={() => toggle(student.id)}
-                        />
-                      </td>
-                    )}
-                    <td className="py-2 pr-4 text-slate-900">{student.name}</td>
-                    <td className="py-2 pr-4 break-all text-slate-700">{student.email}</td>
-                    <td className="py-2 pr-4 text-slate-700">
-                      {student.year} · {student.branch}
-                    </td>
-                    <td className="py-2 pr-4 text-slate-600">{relativeTime(student.createdAt)}</td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {tab.value === 'pending' && (
-                          <>
-                            <Button
-                              disabled={busyId === student.id}
-                              onClick={() => run(student.id, () => approveStudent(student.id), () => `${student.name} approved.`)}
-                            >
-                              Approve
-                            </Button>
-                            <Button variant="danger" disabled={busyId === student.id} onClick={() => setRejecting(student)}>
-                              Reject
-                            </Button>
-                          </>
-                        )}
-                        {tab.value !== 'pending' && (
-                          <>
-                            <Button variant="secondary" disabled={busyId === student.id} onClick={() => resetPassword(student)}>
-                              Reset password
-                            </Button>
-                            <Button
-                              variant={student.status === 'active' ? 'danger' : 'secondary'}
-                              disabled={busyId === student.id}
-                              onClick={() =>
-                                run(
-                                  student.id,
-                                  () => setStudentStatus(student.id, student.status === 'active' ? 'disabled' : 'active'),
-                                  (value) => `${student.name} is now ${value.status}.`,
-                                )
-                              }
-                            >
-                              {student.status === 'active' ? 'Disable' : 'Enable'}
-                            </Button>
-                          </>
-                        )}
+          <Table label="Students">
+            <THead>
+              <tr>
+                {tab.value === 'pending' && (
+                  <Th className="w-10">
+                    <span className="sr-only">Select</span>
+                  </Th>
+                )}
+                <Th>Student</Th>
+                <Th>Year · Branch</Th>
+                <Th>Registered</Th>
+                <Th className="text-right">Actions</Th>
+              </tr>
+            </THead>
+            <TBody>
+              {students.map((student) => (
+                <Tr key={student.id}>
+                  {tab.value === 'pending' && (
+                    <Td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${student.name}`}
+                        className="h-4 w-4 cursor-pointer rounded accent-accent-600"
+                        checked={selected.includes(student.id)}
+                        onChange={() => toggle(student.id)}
+                      />
+                    </Td>
+                  )}
+                  <Td className="min-w-56">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={student.name} size="sm" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900">{student.name}</div>
+                        <div className="break-all text-xs text-slate-500">{student.email}</div>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </Td>
+                  <Td className="whitespace-nowrap text-slate-700">
+                    {student.year} · {student.branch}
+                  </Td>
+                  <Td className="whitespace-nowrap text-slate-600">
+                    <span title={formatDateTime(student.createdAt)}>{relativeTime(student.createdAt)}</span>
+                  </Td>
+                  <Td className="text-right">
+                    <div className="inline-flex flex-wrap justify-end gap-2">
+                      {tab.value === 'pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            icon={Check}
+                            disabled={busyId === student.id}
+                            onClick={() => run(student.id, () => approveStudent(student.id), () => `${student.name} approved.`)}
+                          >
+                            Approve
+                          </Button>
+                          <Button size="sm" variant="secondary" icon={X} disabled={busyId === student.id} onClick={() => setRejecting(student)}>
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                      {tab.value !== 'pending' && (
+                        <>
+                          <Button size="sm" variant="secondary" icon={KeyRound} disabled={busyId === student.id} onClick={() => resetPassword(student)}>
+                            Reset password
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={student.status === 'active' ? 'secondary' : 'success'}
+                            icon={student.status === 'active' ? UserX : UserCheck}
+                            disabled={busyId === student.id}
+                            onClick={() =>
+                              run(
+                                student.id,
+                                () => setStudentStatus(student.id, student.status === 'active' ? 'disabled' : 'active'),
+                                (value) => `${student.name} is now ${value.status}.`,
+                              )
+                            }
+                          >
+                            {student.status === 'active' ? 'Disable' : 'Enable'}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </Table>
         )}
       </Card>
 
@@ -284,7 +290,7 @@ export default function StaffStudentsPage() {
           onReject={async (reason) => {
             await rejectStudent(rejecting.id, reason)
             setRejecting(null)
-            setNotice(`${rejecting.name} was rejected.`)
+            toast.success(`${rejecting.name} was rejected.`)
             reload()
           }}
         />

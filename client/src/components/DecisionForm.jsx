@@ -9,7 +9,8 @@ import {
   STUDENT_OUTCOME_COPY,
 } from '../constants/caseStatus.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
-import { Button, Card, CheckboxField, ErrorAlert, SelectField, TextAreaField, TextField } from './ui.jsx'
+import { Gavel, Search } from 'lucide-react'
+import { Button, Card, CheckboxField, ErrorAlert, SelectField, TextAreaField, TextField } from './ui/index.js'
 
 const STRONG = ['confirmed_fraud', 'verified_genuine']
 const key = (item) => `${item.type}:${item.value}`
@@ -91,7 +92,7 @@ export default function DecisionForm({ caseData, onDecide }) {
   }
 
   return (
-    <Card title="Record decision">
+    <Card title="Record decision" icon={Gavel} description="TPO head only. The student sees only your message.">
       <form
         className="space-y-4"
         onSubmit={(event) => {
@@ -168,7 +169,7 @@ export default function DecisionForm({ caseData, onDecide }) {
               <div className="space-y-2">
                 <div className="flex items-end gap-2">
                   <TextField label="Duplicate of case number" className="flex-1" value={duplicateQuery} onChange={(event) => setDuplicateQuery(event.target.value)} />
-                  <Button variant="secondary" disabled={!duplicateQuery.trim()} onClick={findDuplicate}>
+                  <Button variant="secondary" icon={Search} disabled={!duplicateQuery.trim()} onClick={findDuplicate}>
                     Find
                   </Button>
                 </div>
@@ -193,14 +194,14 @@ export default function DecisionForm({ caseData, onDecide }) {
           value={form.studentMessage}
           onChange={(event) => set({ studentMessage: event.target.value })}
         />
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm" aria-label="Student preview">
+        <div className="rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-inset ring-slate-200" aria-label="Student preview">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">What the student will see</p>
           <p className="mt-1 font-medium text-slate-900">{STUDENT_OUTCOME_COPY[form.type]}</p>
           <p className="whitespace-pre-wrap text-slate-700">{form.studentMessage || '…'}</p>
         </div>
 
         {problems.length > 0 && (
-          <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800" aria-label="Missing before you can record">
+          <ul className="list-disc space-y-1 rounded-xl bg-amber-50 py-2.5 pl-8 pr-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20" aria-label="Missing before you can record">
             {problems.map((problem) => (
               <li key={problem}>{problem}</li>
             ))}
@@ -209,13 +210,13 @@ export default function DecisionForm({ caseData, onDecide }) {
         <ErrorAlert message={error} />
         {conflict && (
           <p className="text-sm">
-            <Link to={`/staff/registry?recruiter=${conflict.recruiterId ?? ''}`} className="font-medium text-blue-700 underline">
+            <Link to={`/staff/registry?recruiter=${conflict.recruiterId ?? ''}`} className="font-medium text-accent-700 underline">
               Open {conflict.companyName ?? 'the recruiter'} in the registry
             </Link>{' '}
             to suspend it first.
           </p>
         )}
-        <Button type="submit" disabled={problems.length > 0}>
+        <Button type="submit" icon={Gavel} disabled={problems.length > 0} className="w-full">
           Record decision
         </Button>
       </form>

@@ -1,34 +1,24 @@
 import { Link } from 'react-router-dom'
+import LegalLayout, { LegalSection } from '../components/LegalLayout.jsx'
 import usePageTitle from '../hooks/usePageTitle.js'
 import usePolicies from '../hooks/usePolicies.js'
 
-function Section({ title, children }) {
-  return (
-    <section className="space-y-2">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-      <div className="space-y-2 text-sm leading-6 text-slate-700">{children}</div>
-    </section>
-  )
-}
+const SECTIONS = ['What we collect and why','What we do not collect','Who can see what','Evidence handling and retention','Outcomes are findings, not guarantees','Corrections and deletion']
 
 export default function PrivacyPage() {
   usePageTitle('Privacy notice')
   const { version, retentionMonths, supportEmail } = usePolicies()
 
   return (
-    <article className="mx-auto max-w-3xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold text-slate-900">Privacy notice</h1>
-        <p className="text-sm text-slate-500">Version {version}</p>
-      </header>
+    <LegalLayout title="Privacy notice" version={version} sections={SECTIONS}>
 
-      <p className="text-sm leading-6 text-slate-700">
+      <p>
         OfferShield is a verification desk your college&apos;s placement cell uses to check suspicious job and internship offers.
         This notice explains what it stores, why, and who can see it.
       </p>
 
-      <Section title="What we collect and why">
-        <ul className="list-disc space-y-1 pl-5">
+      <LegalSection title="What we collect and why">
+        <ul>
           <li>
             <strong>Your account:</strong> name, email, college, year and branch, a hashed password (never the password itself),
             account status, the time you accepted this notice, and your last sign-in time. Used to sign you in and to send
@@ -54,18 +44,18 @@ export default function PrivacyPage() {
             account id. Your IP address is used for rate limiting and is recorded in audit entries for security.
           </li>
         </ul>
-      </Section>
+      </LegalSection>
 
-      <Section title="What we do not collect">
+      <LegalSection title="What we do not collect">
         <p>
           OfferShield never asks for your Aadhaar number, PAN, bank account or card numbers, or OTPs, and the request form blocks
           Aadhaar- and PAN-like numbers. Please do not upload copies of identity documents. There is no location tracking, no
           advertising or analytics cookies, and no email or SMS is sent: the only cookie is your sign-in session.
         </p>
-      </Section>
+      </LegalSection>
 
-      <Section title="Who can see what">
-        <ul className="list-disc space-y-1 pl-5">
+      <LegalSection title="Who can see what">
+        <ul>
           <li>
             <strong>You:</strong> your own requests, the updates and messages the placement cell shares with you, advisories for
             your batch, and your notifications.
@@ -84,39 +74,39 @@ export default function PrivacyPage() {
             but never with your name or email.
           </li>
         </ul>
-      </Section>
+      </LegalSection>
 
-      <Section title="Evidence handling and retention">
+      <LegalSection title="Evidence handling and retention">
         <p>
           Evidence is stored in the service&apos;s database and opened only through short-lived links by you or your
           college&apos;s placement staff. Evidence files are deleted {retentionMonths} months after a request is closed. The written
           record of the request and its decision is kept so the placement cell can show what it decided and why.
         </p>
-      </Section>
+      </LegalSection>
 
-      <Section title="Outcomes are findings, not guarantees">
+      <LegalSection title="Outcomes are findings, not guarantees">
         <p>
           Every outcome is your placement cell&apos;s finding based on the checks it made. OfferShield never certifies an offer as
           safe. Even when an offer is verified, never pay to apply, interview or join, and never share OTPs.
         </p>
-      </Section>
+      </LegalSection>
 
-      <Section title="Corrections and deletion">
+      <LegalSection title="Corrections and deletion">
         <p>
           To correct your details or ask for your account and requests to be deleted, contact your placement cell
           {supportEmail ? (
             <>
-              {' '}or write to <a className="font-medium text-blue-700 hover:underline" href={`mailto:${supportEmail}`}>{supportEmail}</a>
+              {' '}or write to <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
             </>
           ) : null}
           . Some records (such as confirmed fraud findings without your identity, and audit entries) may be kept where the college
           needs them to protect other students.
         </p>
-      </Section>
+      </LegalSection>
 
-      <p className="text-sm text-slate-600">
-        See also the <Link to="/terms" className="font-medium text-blue-700 hover:underline">terms of use</Link>.
+      <p>
+        See also the <Link to="/terms">terms of use</Link>.
       </p>
-    </article>
+    </LegalLayout>
   )
 }

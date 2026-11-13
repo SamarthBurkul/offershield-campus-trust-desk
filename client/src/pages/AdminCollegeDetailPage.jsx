@@ -1,11 +1,27 @@
+import { Building2, KeyRound, RefreshCcw, Save, UserPlus, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createTpoHead, getCollege, listCollegeStaff, resetTpoHeadPassword, rotateJoinCode, updateCollege } from '../api/admin.js'
 import { errorMessage } from '../api/errors.js'
 import { ROLE_LABELS, ROLES } from '../auth/roles.js'
-import { Button, Card, ErrorAlert, OneTimeSecret, SelectField, StatusBadge, TextField } from '../components/ui.jsx'
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  ErrorAlert,
+  OneTimeSecret,
+  PageHeader,
+  SelectField,
+  Skeleton,
+  StatusBadge,
+  TextField,
+  useToast,
+} from '../components/ui/index.js'
+import usePageTitle from '../hooks/usePageTitle.js'
 import { splitList } from '../utils/lists.js'
-import Skeleton from '../components/Skeleton.jsx'
 
 const toForm = (college) => ({
   name: college.name,
@@ -21,6 +37,7 @@ const VERIFICATION_LABELS = Object.freeze({
 })
 
 export default function AdminCollegeDetailPage() {
+  usePageTitle('College')
   const { id } = useParams()
   const [college, setCollege] = useState(null)
   const [staff, setStaff] = useState([])
@@ -46,11 +63,19 @@ export default function AdminCollegeDetailPage() {
 
   if (loadError) {
     return (
-      <div className="space-y-4">
-        <ErrorAlert message={loadError} />
-        <Link to="/admin" className="font-medium text-blue-700 hover:underline">
-          Back to colleges
-        </Link>
+      <div className="mx-auto max-w-xl">
+        <EmptyState
+          icon={Building2}
+          as="h1"
+          title="College not available"
+          action={
+            <Link to="/admin" className="text-sm font-medium text-accent-700 hover:text-accent-800">
+              Back to colleges
+            </Link>
+          }
+        >
+          <span role="alert">{loadError}</span>
+        </EmptyState>
       </div>
     )
   }
@@ -68,38 +93,50 @@ export default function AdminCollegeDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <Link to="/admin" className="text-sm font-medium text-blue-700 hover:underline">
-          ← All colleges
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900">{college.name}</h1>
-        <p className="text-slate-600">
-          {college.code} · <StatusBadge status={college.status} />
-        </p>
+      <PageHeader
+        breadcrumb={[{ label: 'Colleges', to: '/admin' }, { label: college.name }]}
+        title={college.name}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span className="font-mono text-slate-500">{college.code}</span>
+            <StatusBadge status={college.status} />
+            {college.isDemo && <Badge tone="warning">Demo</Badge>}
+          </span>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        {/* Keyed by updatedAt so the form re-reads the saved values; the success message is a toast, so it survives the remount. */}
+        <EditCollegeCard key={college.updatedAt} college={college} onSaved={setCollege} />
+        <div className="space-y-6">
+          <JoinCodeCard collegeId={college.id} />
+          <CreateTpoHeadCard college={college} onCreated={() => setReloadKey((key) => key + 1)} />
+        </div>
       </div>
 
-      <EditCollegeCard key={college.updatedAt} college={college} onSaved={setCollege} />
-      <JoinCodeCard collegeId={college.id} />
-      <CreateTpoHeadCard college={college} onCreated={() => setReloadKey((key) => key + 1)} />
-
-      <Card title="Staff">
-        {secret && (
-          <OneTimeSecret label={`Temporary password for ${secret.email}`} value={secret.password} onDismiss={() => setSecret(null)} />
-        )}
-        <ErrorAlert message={resetError} />
+      <Card title="Staff" icon={Users} padded={false}>
+        <div className="space-y-3 p-5 empty:hidden">
+          {secret && <OneTimeSecret label={`Temporary password for ${secret.email}`} value={secret.password} onDismiss={() => setSecret(null)} />}
+          <ErrorAlert message={resetError} />
+        </div>
         {staff.length === 0 ? (
-          <p className="text-slate-600">No staff accounts yet.</p>
+          <p className="px-5 pb-5 text-sm text-slate-600">No staff accounts yet.</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {staff.map((member) => (
-              <li key={member.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                <span className="text-slate-900">
-                  {member.name} <span className="text-slate-500">· {member.email}</span>
+              <li key={member.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+                <span className="flex min-w-0 items-center gap-3">
+                  <Avatar name={member.name} size="sm" />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-slate-900">{member.name}</span>
+                    <span className="block break-all text-xs text-slate-500">{member.email}</span>
+                  </span>
                 </span>
                 <span className="flex items-center gap-2 text-slate-600">
-                  {ROLE_LABELS[member.role]} <StatusBadge status={member.status} />
+                  <Badge tone={member.role === ROLES.TPO_HEAD ? 'brand' : 'neutral'}>{ROLE_LABELS[member.role]}</Badge>
+                  <StatusBadge status={member.status} />
                   {member.role === ROLES.TPO_HEAD && (
-                    <Button variant="secondary" onClick={() => resetHead(member)}>
+                    <Button size="sm" variant="secondary" icon={KeyRound} onClick={() => resetHead(member)}>
                       Reset password
                     </Button>
                   )}
@@ -114,9 +151,9 @@ export default function AdminCollegeDetailPage() {
 }
 
 function EditCollegeCard({ college, onSaved }) {
+  const toast = useToast()
   const [form, setForm] = useState(() => toForm(college))
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -124,7 +161,6 @@ function EditCollegeCard({ college, onSaved }) {
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
-    setSaved(false)
     setSubmitting(true)
     try {
       const updated = await updateCollege(college.id, {
@@ -134,19 +170,18 @@ function EditCollegeCard({ college, onSaved }) {
         status: form.status,
         studentVerification: form.studentVerification,
       })
-      setSaved(true)
+      toast.success('Saved. College details updated.')
       onSaved(updated)
     } catch (err) {
       setError(errorMessage(err))
-    } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Card title="College details">
+    <Card title="College details" icon={Building2}>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField label="College name" value={form.name} onChange={update('name')} />
           <SelectField label="Status" value={form.status} onChange={update('status')}>
             <option value="active">active</option>
@@ -154,7 +189,7 @@ function EditCollegeCard({ college, onSaved }) {
           </SelectField>
           <TextField label="Email domains" hint="Comma-separated" value={form.emailDomains} onChange={update('emailDomains')} />
           <TextField label="Branches" hint="Comma-separated" value={form.branches} onChange={update('branches')} />
-          <SelectField label="Student verification" value={form.studentVerification} onChange={update('studentVerification')}>
+          <SelectField label="Student verification" value={form.studentVerification} onChange={update('studentVerification')} className="sm:col-span-2">
             {Object.entries(VERIFICATION_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -163,8 +198,7 @@ function EditCollegeCard({ college, onSaved }) {
           </SelectField>
         </div>
         <ErrorAlert message={error} />
-        {saved && <p className="text-sm text-emerald-700">Saved.</p>}
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" icon={Save} loading={submitting}>
           {submitting ? 'Saving…' : 'Save changes'}
         </Button>
       </form>
@@ -175,32 +209,37 @@ function EditCollegeCard({ college, onSaved }) {
 function JoinCodeCard({ collegeId }) {
   const [joinCode, setJoinCode] = useState(null)
   const [error, setError] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   async function rotate() {
-    if (!window.confirm('Rotate the student join code? The current code stops working immediately.')) return
     setError('')
     setSubmitting(true)
     try {
       const result = await rotateJoinCode(collegeId)
       setJoinCode(result.studentJoinCode)
+      setConfirming(false)
     } catch (err) {
       setError(errorMessage(err))
+      setConfirming(false)
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Card title="Student join code">
-      <p className="text-sm text-slate-600">
-        Only a hash of the join code is stored, so it cannot be shown again. Rotate it to issue a new one.
-      </p>
+    <Card title="Student join code" icon={KeyRound}>
+      <p className="text-sm text-slate-600">Only a hash of the join code is stored, so it cannot be shown again. Rotate it to issue a new one.</p>
       {joinCode && <OneTimeSecret label="New student join code" value={joinCode} onDismiss={() => setJoinCode(null)} />}
       <ErrorAlert message={error} />
-      <Button variant="secondary" disabled={submitting} onClick={rotate}>
-        {submitting ? 'Rotating…' : 'Rotate join code'}
+      <Button variant="secondary" icon={RefreshCcw} onClick={() => setConfirming(true)}>
+        Rotate join code
       </Button>
+      {confirming && (
+        <ConfirmDialog title="Rotate the student join code?" confirmLabel="Rotate join code" danger busy={submitting} onConfirm={rotate} onCancel={() => setConfirming(false)}>
+          <p>The current code stops working immediately. Share the new code with the placement cell.</p>
+        </ConfirmDialog>
+      )}
     </Card>
   )
 }
@@ -229,29 +268,16 @@ function CreateTpoHeadCard({ college, onCreated }) {
   }
 
   return (
-    <Card title="Add a TPO head">
-      {created && (
-        <OneTimeSecret
-          label={`Temporary password for ${created.user.email}`}
-          value={created.temporaryPassword}
-          onDismiss={() => setCreated(null)}
-        />
-      )}
-      <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end" noValidate>
+    <Card title="Add a TPO head" icon={UserPlus}>
+      {created && <OneTimeSecret label={`Temporary password for ${created.user.email}`} value={created.temporaryPassword} onDismiss={() => setCreated(null)} />}
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <TextField label="TPO head name" required value={form.name} onChange={update('name')} />
-        <TextField
-          label="TPO head email"
-          type="email"
-          required
-          hint={`Must use ${college.emailDomains.join(' or ')}`}
-          value={form.email}
-          onChange={update('email')}
-        />
-        <Button type="submit" disabled={submitting}>
+        <TextField label="TPO head email" type="email" required hint={`Must use ${college.emailDomains.join(' or ')}`} value={form.email} onChange={update('email')} />
+        <ErrorAlert message={error} />
+        <Button type="submit" icon={UserPlus} loading={submitting}>
           {submitting ? 'Creating…' : 'Create TPO head'}
         </Button>
       </form>
-      <ErrorAlert message={error} />
     </Card>
   )
 }

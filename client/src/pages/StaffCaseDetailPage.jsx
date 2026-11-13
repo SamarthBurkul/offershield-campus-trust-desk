@@ -1,3 +1,4 @@
+import { ArrowLeft, Banknote, ChevronDown, CirclePlay, FileWarning, Fingerprint, Gavel, History, Paperclip, RefreshCw, RotateCcw, UserRound } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deskErrorMessage, errorMessage } from '../api/errors.js'
@@ -19,19 +20,24 @@ import RelatedCasesPanel from '../components/RelatedCasesPanel.jsx'
 import ReopenDialog from '../components/ReopenDialog.jsx'
 import SignalsPanel from '../components/SignalsPanel.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-import { Button, Card, ErrorAlert } from '../components/ui.jsx'
+import { Alert, Avatar, Badge, Button, Card, Drawer, EmptyState, KeyValueList, Skeleton, useToast } from '../components/ui/index.js'
 import { CHANNEL_LABELS, MONEY_PURPOSE_LABELS, PRIORITY_LABELS, isClosedStatus } from '../constants/caseStatus.js'
 import usePageTitle from '../hooks/usePageTitle.js'
-import Skeleton from '../components/Skeleton.jsx'
+import { formatDate, formatMoney } from '../utils/format.js'
 
 const yesNo = (value) => (value ? 'Yes' : 'No')
 
-function Detail({ term, children }) {
+/** Collapsible side section (open by default). */
+function Section({ title, icon: Icon, children, defaultOpen = true }) {
   return (
-    <div>
-      <dt className="text-slate-500">{term}</dt>
-      <dd className="break-words text-slate-900">{children}</dd>
-    </div>
+    <details open={defaultOpen} className="group rounded-2xl bg-white shadow-card ring-1 ring-slate-900/5">
+      <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <Icon className="h-4 w-4 text-brand-600" aria-hidden="true" />
+        <span className="flex-1">{title}</span>
+        <ChevronDown className="h-4 w-4 text-slate-400 transition duration-150 group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="space-y-3 border-t border-slate-100 px-4 py-4">{children}</div>
+    </details>
   )
 }
 
@@ -40,12 +46,12 @@ export default function StaffCaseDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
   const [data, setData] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [banner, setBanner] = useState('')
   const [reopening, setReopening] = useState(false)
   const [addingRecruiter, setAddingRecruiter] = useState(false)
-  const [notice, setNotice] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -82,12 +88,19 @@ export default function StaffCaseDetailPage() {
 
   if (loadError) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-900">Case not available</h1>
-        <ErrorAlert message={loadError} />
-        <Link to="/staff/cases" className="font-medium text-blue-700 hover:underline">
-          Back to the case desk
-        </Link>
+      <div className="mx-auto max-w-xl">
+        <EmptyState
+          icon={FileWarning}
+          as="h1"
+          title="Case not available"
+          action={
+            <Link to="/staff/cases" className="inline-flex items-center gap-1 text-sm font-medium text-accent-700 hover:text-accent-800">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to the case desk
+            </Link>
+          }
+        >
+          <span role="alert">{loadError}</span>
+        </EmptyState>
       </div>
     )
   }
@@ -108,104 +121,136 @@ export default function StaffCaseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Link to="/staff/cases" className="text-sm font-medium text-blue-700 hover:underline">
-          ← Case desk
+      <nav aria-label="Breadcrumb" className="text-sm">
+        <Link to="/staff/cases" className="inline-flex items-center gap-1 font-medium text-slate-600 transition hover:text-accent-700">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Case desk
         </Link>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-mono text-2xl font-bold text-slate-900">{data.caseNumber}</h1>
+      </nav>
+
+      <div className="sticky top-16 z-10 -mx-1 rounded-2xl bg-white/95 px-5 py-4 shadow-card ring-1 ring-slate-900/5 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="font-mono text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">{data.caseNumber}</h1>
             <StatusBadge status={data.status} audience="staff" />
-            <span className={`text-sm ${data.priority === 'high' ? 'font-semibold text-red-700' : 'text-slate-600'}`}>
-              {PRIORITY_LABELS[data.priority]} priority
-            </span>
-            {data.isStale && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">Stale</span>}
+            <Badge tone={data.priority === 'high' ? 'danger' : 'neutral'}>{PRIORITY_LABELS[data.priority]} priority</Badge>
+            {data.isStale && <Badge tone="warning">Stale</Badge>}
+            <span className="hidden truncate text-sm text-slate-500 md:inline">{data.claimedCompany}</span>
           </div>
-          <AssigneeSelect
-            user={user}
-            assignee={data.assignee}
-            disabled={closed}
-            onAssign={(assigneeId) => run(() => staffCases.assignCase(data.id, assigneeId)).catch(() => {})}
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <AssigneeSelect
+              user={user}
+              assignee={data.assignee}
+              disabled={closed}
+              onAssign={(assigneeId) => run(() => staffCases.assignCase(data.id, assigneeId)).catch(() => {})}
+            />
+            {data.status === 'awaiting_student' && (
+              <Button variant="secondary" size="sm" icon={CirclePlay} onClick={() => run(() => staffCases.setCaseStatus(data.id, 'under_review')).catch(() => {})}>
+                Resume review without a reply
+              </Button>
+            )}
+            {!closed && (
+              <a href="#outcome-panel" className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-900 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-brand-800">
+                <Gavel className="h-3.5 w-3.5" aria-hidden="true" />
+                {isHead ? 'Decide' : 'Recommend'}
+              </a>
+            )}
+            {closed && isHead && (
+              <Button variant="secondary" size="sm" icon={RotateCcw} onClick={() => setReopening(true)}>
+                Reopen
+              </Button>
+            )}
+          </div>
         </div>
-        {data.status === 'awaiting_student' && (
-          <Button variant="secondary" onClick={() => run(() => staffCases.setCaseStatus(data.id, 'under_review')).catch(() => {})}>
-            Resume review without a reply
-          </Button>
-        )}
       </div>
 
       {banner && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <span>{banner}</span>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setBanner('')
-              setReloadKey((value) => value + 1)
-            }}
-          >
-            Refresh
-          </Button>
-        </div>
+        <Alert
+          variant="warning"
+          role="alert"
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RefreshCw}
+              onClick={() => {
+                setBanner('')
+                setReloadKey((value) => value + 1)
+              }}
+            >
+              Refresh
+            </Button>
+          }
+        >
+          {banner}
+        </Alert>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <Card title="Offer">
-            <dl className="grid gap-3 text-sm">
-              <Detail term="Company (as claimed)">{data.claimedCompany}</Detail>
-              {data.roleTitle && <Detail term="Role">{data.roleTitle}</Detail>}
-              <Detail term="Channel">{CHANNEL_LABELS[data.channel] ?? data.channel}</Detail>
-              <Detail term="Received">{new Date(data.receivedAt).toLocaleDateString()}</Detail>
-            </dl>
-            <p className="whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm text-slate-800">{data.messageText}</p>
-            {data.studentNote && (
-              <Detail term="Student note">
-                <span className="whitespace-pre-wrap">{data.studentNote}</span>
-              </Detail>
-            )}
-          </Card>
-          <Card title="Money">
-            <dl className="grid gap-2 text-sm">
-              <Detail term="Money requested">{yesNo(money.requested)}</Detail>
-              {money.requested && <Detail term="Amount">{money.amount == null ? 'Not stated' : `₹${money.amount}`}</Detail>}
-              {money.requested && <Detail term="Purpose">{MONEY_PURPOSE_LABELS[money.purpose] ?? 'Not stated'}</Detail>}
-              <Detail term="Already paid">{yesNo(data.paidAlready)}</Detail>
-              <Detail term="Documents shared">{yesNo(data.documentsShared)}</Detail>
-            </dl>
-          </Card>
-          <Card title="Student">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-12">
+        <div className="space-y-4 lg:row-span-2 xl:col-span-3 xl:row-span-1">
+          <Section title="Offer" icon={FileWarning}>
+            <KeyValueList
+              items={[
+                { term: 'Company (as claimed)', value: data.claimedCompany },
+                data.roleTitle && { term: 'Role', value: data.roleTitle },
+                { term: 'Channel', value: CHANNEL_LABELS[data.channel] ?? data.channel },
+                { term: 'Received', value: formatDate(data.receivedAt) },
+              ]}
+            />
+            <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-800 ring-1 ring-inset ring-slate-200">{data.messageText}</p>
+            {data.studentNote && <KeyValueList items={[{ term: 'Student note', value: <span className="whitespace-pre-wrap">{data.studentNote}</span> }]} />}
+          </Section>
+          <Section title="Money" icon={Banknote}>
+            <KeyValueList
+              columns={2}
+              items={[
+                { term: 'Money requested', value: yesNo(money.requested) },
+                money.requested && { term: 'Amount', value: money.amount == null ? 'Not stated' : formatMoney(money.amount) },
+                money.requested && { term: 'Purpose', value: MONEY_PURPOSE_LABELS[money.purpose] ?? 'Not stated' },
+                { term: 'Already paid', value: yesNo(data.paidAlready) },
+                { term: 'Documents shared', value: yesNo(data.documentsShared) },
+              ]}
+            />
+          </Section>
+          <Section title="Student" icon={UserRound}>
             {data.student ? (
-              <dl className="grid gap-2 text-sm">
-                <Detail term="Name">{data.student.name}</Detail>
-                <Detail term="Email">{data.student.email}</Detail>
-                <Detail term="Branch / year">
-                  {data.student.branch} · Year {data.student.year}
-                </Detail>
-              </dl>
+              <div className="flex items-start gap-3">
+                <Avatar name={data.student.name} />
+                <KeyValueList
+                  items={[
+                    { term: 'Name', value: data.student.name },
+                    { term: 'Email', value: <span className="break-all">{data.student.email}</span> },
+                    {
+                      term: 'Branch / year',
+                      value: (
+                        <>
+                          {data.student.branch} · Year {data.student.year}
+                        </>
+                      ),
+                    },
+                  ]}
+                />
+              </div>
             ) : (
               <p className="text-sm text-slate-600">Student account not found.</p>
             )}
-          </Card>
-          <Card title="Indicators">
+          </Section>
+          <Section title="Indicators" icon={Fingerprint}>
             <IndicatorList indicators={data.indicators} />
-          </Card>
-          <Card title="Evidence">
+          </Section>
+          <Section title="Evidence" icon={Paperclip}>
             <EvidenceList caseId={data.id} evidence={data.evidence} />
-          </Card>
+          </Section>
         </div>
 
-        <div className="space-y-6">
-          <Card title="Timeline">
+        <div className="space-y-6 xl:col-span-6">
+          <Card title="Timeline" icon={History}>
             <CaseTimeline events={data.events} showVisibility />
           </Card>
           <Composer key={`${data.id}:${closed}`} closed={closed} onSubmit={compose} />
           <NotesPanel notes={data.notes} />
         </div>
 
-        <div className="space-y-6">
-          {notice && <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{notice}</p>}
+        <div className="space-y-6 lg:col-start-2 xl:col-span-3 xl:col-start-auto" id="outcome-panel">
           <SignalsPanel signals={data.signals} computedAt={data.signalsComputedAt} onRecompute={() => run(() => staffCases.recomputeSignals(data.id))} />
           <RelatedCasesPanel
             caseId={data.id}
@@ -239,10 +284,8 @@ export default function StaffCaseDetailPage() {
       </div>
 
       {addingRecruiter && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 p-4">
-          <div role="dialog" aria-modal="true" aria-label="Add to recruiter registry" className="mx-auto max-w-2xl space-y-4 rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900">Add to recruiter registry</h2>
-            <RecruiterForm
+        <Drawer title="Add to recruiter registry" description="Prefilled from this verified_genuine decision." onClose={() => setAddingRecruiter(false)}>
+          <RecruiterForm
             isHead={isHead}
             initial={{
               companyName: data.claimedCompany,
@@ -258,11 +301,10 @@ export default function StaffCaseDetailPage() {
                 throw new Error(errorMessage(err))
               }
               setAddingRecruiter(false)
-              setNotice(`${body.companyName} was added to the recruiter registry.`)
+              toast.success(`${body.companyName} was added to the recruiter registry.`)
             }}
           />
-          </div>
-        </div>
+        </Drawer>
       )}
 
       {reopening && (
@@ -271,6 +313,7 @@ export default function StaffCaseDetailPage() {
           onReopen={async (reason) => {
             await run(() => staffCases.reopenCase(data.id, reason))
             setReopening(false)
+            toast.success('Case reopened.')
           }}
         />
       )}

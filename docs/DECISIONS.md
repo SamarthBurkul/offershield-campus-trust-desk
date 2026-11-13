@@ -288,3 +288,39 @@
 - **Context:** A pilot needs a clear privacy notice and terms, and proof that students accepted them.
 - **Decision:** `/privacy` and `/terms` describe the actual system; registration requires `acceptPolicies: true` and stores `policiesAcceptedAt` and `policiesVersion` (`constants/policies.js`, mirrored in the client). There is no re-acceptance flow yet: a material change bumps the version and the placement cell informs students.
 - **Consequence:** Simple, auditable consent for new users; existing accounts created before Phase 7 have no recorded acceptance.
+
+## ADR-049: One light design language for every role
+
+- **Context:** Phase 8 replaces a wireframe-like UI before a placement-cell demo. Options were a dark student theme plus a light staff theme, a full dark mode, or one language.
+- **Decision:** One light, professional language for students, staff and the super admin. Premium feel comes from a deep-navy brand chrome (staff sidebar, student top bar), a navy gradient hero band on the landing, auth and student-home pages, Inter, layered cards and semantic badges. No dark mode in this phase.
+- **Consequence:** One set of tokens and components to test and keep accessible (WCAG AA on light surfaces is straightforward); screenshots and training material look the same for every role. Dual themes would double the visual QA for little user value now; dark mode can be added later by redefining the `@theme` tokens.
+
+## ADR-050: Self-hosted Inter via @fontsource-variable/inter
+
+- **Context:** The production CSP is `font-src 'self' data:`; Google Fonts would need a CSP change and an external request on every page load.
+- **Decision:** Add `@fontsource-variable/inter` (5.3.0) and import it in `main.jsx`; Vite bundles the woff2 files into `client/dist/assets`, and `unicode-range` means browsers only download the Latin subset in practice.
+- **Consequence:** CSP unchanged, no third-party request, consistent rendering; about 48 kB (Latin) is cached with the immutable asset headers.
+
+## ADR-051: lucide-react for all icons
+
+- **Context:** The UI used emoji (bell, lock, ticks), which render differently per platform and are not reliably accessible.
+- **Decision:** `lucide-react` (1.72.0) with tree-shaken named imports; icons are `aria-hidden` beside text, and icon-only buttons go through `IconButton`, which requires a label. Brand icons are not used (generic icons for WhatsApp, LinkedIn and the like).
+- **Consequence:** Consistent 1.5 px-stroke icons; only the icons actually imported are bundled (most land in the lazily loaded staff chunks).
+
+## ADR-052: Own primitives instead of a component library
+
+- **Context:** Component libraries (MUI, Chakra, shadcn-style generators) bring their own styling systems, large dependency trees or copy-in code, and would fight Tailwind v4 and the CSP.
+- **Decision:** A small in-house design system in `client/src/components/ui/` (buttons, fields, cards, badges, tabs, tables, dialog, drawer, menu, toasts…) built on Tailwind tokens and `clsx` (2.1.1) for class composition. No chart or animation library: bars are CSS, motion is CSS transitions.
+- **Consequence:** Full control over accessibility details (focus handling kept from Phase 7), a small bundle and no new runtime dependency risk; we maintain the primitives ourselves.
+
+## ADR-053: All dates and money formatted in one en-IN module
+
+- **Context:** Dates showed as `12/11/2026` (ambiguous, US order) and were formatted ad hoc in a dozen places.
+- **Decision:** `client/src/utils/format.js` is the only formatter: `Intl` with `en-IN` gives `12 Nov 2026`, `12 Nov 2026, 1:34 pm`, relative "3 hours ago" (exact time in the `title` tooltip) and `₹22,543` with Indian digit grouping. A test fails if `toLocale*` is used anywhere else.
+- **Consequence:** Unambiguous dates for Indian users and one place to change formats; times use the viewer's local time zone (IST for campus users).
+
+## ADR-054: Lazy-loaded staff, admin and legal pages
+
+- **Context:** Students are the largest group and often on mobile data; they never need the staff desk, registry, stats or admin code.
+- **Decision:** `React.lazy` + `Suspense` (skeleton fallback) for every staff and admin page and for the privacy and terms pages. Landing, auth and student pages stay in the main chunk.
+- **Consequence:** The main JS chunk fell from 485 kB (143 kB gzip) to about 359 kB (107 kB gzip); staff pages load on first visit (a few kB to 32 kB each).

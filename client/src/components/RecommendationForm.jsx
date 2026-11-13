@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { DECISION_TYPE_LABELS } from '../constants/caseStatus.js'
-import { Button, Card, ErrorAlert, SelectField, TextAreaField } from './ui.jsx'
+import { Sparkles } from 'lucide-react'
+import { formatDateTime, relativeTime } from '../utils/format.js'
+import { Avatar, Button, Card, ErrorAlert, SelectField, TextAreaField } from './ui/index.js'
 
 export function CurrentRecommendation({ recommendation }) {
   if (!recommendation) return <p className="text-sm text-slate-600">No recommendation yet.</p>
   return (
-    <div className="space-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-      <p className="font-medium text-slate-900">Recommended: {DECISION_TYPE_LABELS[recommendation.type]}</p>
-      <p className="whitespace-pre-wrap text-slate-700">{recommendation.basis}</p>
-      <p className="text-xs text-slate-500">
-        {recommendation.by?.name ?? 'Staff'} · {new Date(recommendation.at).toLocaleString()}
+    <div className="space-y-1.5 rounded-xl bg-brand-50/60 p-3 text-sm ring-1 ring-inset ring-brand-200/70">
+      <p className="font-semibold text-slate-900">Recommended: {DECISION_TYPE_LABELS[recommendation.type]}</p>
+      <p className="whitespace-pre-wrap leading-6 text-slate-700">{recommendation.basis}</p>
+      <p className="flex items-center gap-1.5 text-xs text-slate-500">
+        <Avatar name={recommendation.by?.name ?? 'Staff'} size="xs" />
+        {recommendation.by?.name ?? 'Staff'} · <span title={formatDateTime(recommendation.at)}>{relativeTime(recommendation.at)}</span>
       </p>
     </div>
   )
@@ -41,7 +44,7 @@ export default function RecommendationForm({ recommendation, onRecommend }) {
   }
 
   return (
-    <Card title="Recommendation">
+    <Card title="Recommendation" icon={Sparkles}>
       <CurrentRecommendation recommendation={recommendation} />
       <form onSubmit={submit} className="space-y-3">
         <SelectField label="Recommended outcome" value={type} onChange={(event) => setType(event.target.value)}>
@@ -53,7 +56,7 @@ export default function RecommendationForm({ recommendation, onRecommend }) {
         </SelectField>
         <TextAreaField label="Why?" rows={3} hint="Staff only. The TPO head records the final decision." value={basis} onChange={(event) => setBasis(event.target.value)} />
         <ErrorAlert message={error} />
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" loading={busy}>
           {busy ? 'Saving…' : recommendation ? 'Update recommendation' : 'Add recommendation'}
         </Button>
       </form>

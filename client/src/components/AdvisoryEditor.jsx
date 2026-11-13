@@ -6,7 +6,8 @@ import AdvisoryCard from './AdvisoryCard.jsx'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import IndicatorPicker from './IndicatorPicker.jsx'
 import TargetPicker from './TargetPicker.jsx'
-import { Button, Card, ErrorAlert, SelectField, TextAreaField, TextField } from './ui.jsx'
+import { Eye, Megaphone, Save, Send, Users } from 'lucide-react'
+import { Button, Card, ErrorAlert, SelectField, TextAreaField, TextField, useToast } from './ui/index.js'
 
 const EMPTY = { title: '', body: '', severity: 'warning', target: { years: [], branches: [] }, indicatorIds: [], sourceCaseId: null }
 
@@ -29,7 +30,7 @@ export default function AdvisoryEditor({ initial = {}, isHead, branches = [], on
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const toast = useToast()
   const set = (patch) => setForm((current) => ({ ...current, ...patch }))
   const problems = problemsOf(form)
   const targetKey = `${form.target.years.join(',')}|${form.target.branches.join(',')}`
@@ -71,11 +72,10 @@ export default function AdvisoryEditor({ initial = {}, isHead, branches = [], on
   async function save() {
     setBusy(true)
     setError('')
-    setNotice('')
     try {
       const saved = await onSave(body(), savedId)
       setSavedId(saved.id)
-      setNotice('Draft saved.')
+      toast.success('Draft saved.')
       return saved
     } catch (err) {
       setError(errorMessage(err, err.message))
@@ -106,8 +106,8 @@ export default function AdvisoryEditor({ initial = {}, isHead, branches = [], on
   const previewIndicators = (indicators ?? []).filter((item) => form.indicatorIds.includes(item.id))
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <Card title="Advisory">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+      <Card title="Advisory" icon={Megaphone}>
         <form onSubmit={(event) => event.preventDefault()} className="space-y-4" noValidate aria-label="Advisory editor">
           <TextField label="Title" value={form.title} onChange={(event) => set({ title: event.target.value })} hint="5–120 characters." />
           <TextAreaField label="Message to students" rows={7} value={form.body} onChange={(event) => set({ body: event.target.value })} hint="20–3000 characters. Never name the student who reported it." />
@@ -117,25 +117,29 @@ export default function AdvisoryEditor({ initial = {}, isHead, branches = [], on
             <option value="critical">Critical</option>
           </SelectField>
           <TargetPicker value={form.target} branches={branches} onChange={(target) => set({ target })} />
-          <p className="text-sm text-slate-700" aria-live="polite">
-            Audience: <strong>{audience == null ? '…' : `${audience} student${audience === 1 ? '' : 's'}`}</strong>
-          </p>
+          <div className="flex items-center gap-3 rounded-xl bg-accent-50 px-4 py-3 ring-1 ring-inset ring-accent-200" aria-live="polite">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-accent-700 shadow-sm" aria-hidden="true">
+              <Users className="h-4 w-4" />
+            </span>
+            <p className="text-sm text-slate-700">
+              Audience: <strong className="text-lg font-semibold text-slate-900 tabular-nums">{audience == null ? '…' : `${audience} student${audience === 1 ? '' : 's'}`}</strong>
+            </p>
+          </div>
           <IndicatorPicker indicators={indicators} selected={form.indicatorIds} onChange={(indicatorIds) => set({ indicatorIds })} />
           {problems.length > 0 && (
-            <ul className="list-disc pl-5 text-sm text-amber-800" aria-label="Missing before saving">
+            <ul className="list-disc space-y-1 rounded-xl bg-amber-50 py-2.5 pl-8 pr-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-600/20" aria-label="Missing before saving">
               {problems.map((problem) => (
                 <li key={problem}>{problem}</li>
               ))}
             </ul>
           )}
           <ErrorAlert message={error} />
-          {notice && <p className="text-sm text-emerald-700">{notice}</p>}
           <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" disabled={busy || problems.length > 0} onClick={save}>
+            <Button variant="secondary" icon={Save} disabled={busy || problems.length > 0} onClick={save}>
               Save draft
             </Button>
             {isHead && (
-              <Button disabled={busy || problems.length > 0} onClick={startPublish}>
+              <Button icon={Send} disabled={busy || problems.length > 0} onClick={startPublish}>
                 Publish…
               </Button>
             )}
@@ -144,7 +148,7 @@ export default function AdvisoryEditor({ initial = {}, isHead, branches = [], on
         </form>
       </Card>
 
-      <Card title="Preview as student">
+      <Card title="Preview as student" icon={Eye} description="Exactly what targeted students will see." className="xl:sticky xl:top-24 xl:self-start">
         <AdvisoryCard advisory={{ title: form.title || 'Advisory title', body: form.body || 'Advisory message…', severity: form.severity, indicators: previewIndicators }} />
       </Card>
 

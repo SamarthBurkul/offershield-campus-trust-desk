@@ -8,7 +8,7 @@ import { getStaffAdvisory, withdrawAdvisory } from '../api/advisories.js'
 import { getMe } from '../api/auth.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import ReopenDialog from '../components/ReopenDialog.jsx'
-import { TextAreaField, TextField } from '../components/ui.jsx'
+import { TextAreaField, TextField } from '../components/ui/index.js'
 
 vi.mock('../api/auth.js', () => ({ getMe: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn(), changePassword: vi.fn() }))
 vi.mock('../api/advisories.js', () => ({

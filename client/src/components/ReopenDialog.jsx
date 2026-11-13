@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import ConfirmDialog from './ConfirmDialog.jsx'
-import { ErrorAlert, TextAreaField } from './ui.jsx'
+import { ErrorAlert, TextAreaField } from './ui/index.js'
 
 /** TPO head reopens a closed case with a staff-only reason (10–1000 characters). */
 export default function ReopenDialog({ onReopen, onCancel }) {

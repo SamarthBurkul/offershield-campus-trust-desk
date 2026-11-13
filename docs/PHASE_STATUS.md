@@ -8,12 +8,43 @@
 | 4 | TPO investigation desk, decisions, audit trail | **Passed (architect-reviewed 2026-11-10)** |
 | 5 | Registry, lookup, look-alike detection, related-case linking, warning signals | **Passed (architect-reviewed 2026-11-11)** |
 | 6 | Advisories, notifications, stats, UI polish | **Passed (architect-reviewed and user-tested 2026-11-12)** |
-| 7 | Pilot readiness: dialog focus fix, manual-approval students, staff-assisted resets, fair rate limits, privacy/terms with consent, production single service, showcase demo college, ops scripts, deployment and user docs | **Implemented — awaiting architect review** |
-| 8 | Full visual redesign | Not started |
+| 7 | Pilot readiness: dialog focus fix, manual-approval students, staff-assisted resets, fair rate limits, privacy/terms with consent, production single service, showcase demo college, ops scripts, deployment and user docs | **Passed (architect-reviewed 2026-11-12)** |
+| 8 | Premium UI redesign (presentation only): design system, role shells, every page restyled, en-IN formatting, lazy-loaded staff pages, screenshots | **Implemented — awaiting architect review** |
+
+## Phase 8 — details
+
+**Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- Design tokens (Tailwind v4 `@theme`: navy `brand`, royal-blue `accent`, semantic emerald/amber/rose/sky/slate, radii, shadows, motion) and self-hosted Inter Variable; see [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+- `components/ui/` primitives: buttons, fields, file dropzone, cards, page header, badges, avatar, tabs, table, pagination, dialog (focus trap, Escape, focus return, Phase 7 typing fix kept), drawer, dropdown menu, toasts, alerts, empty states, skeletons, stat cards, progress bars, code chips.
+- Shells: public marketing layout, navy student top bar with mobile sheet, staff/admin sidebar (role-based groups, count badges, off-canvas below `lg`) with quick lookup, bell and user menu; inline SVG logo and new favicon.
+- Every page redesigned (landing, auth split layout, privacy/terms with TOC, student home hero lookup, numbered new-request form, request detail, staff home with "Needs attention", case desk, three-column case detail, registry with drawers and menus, advisories editor with live preview, stats with presets, audit log, students, staff, admin). Timeline with icons and internal tinting.
+- `utils/format.js` (en-IN) replaces every `toLocale*` call; "Saved" bug on the admin college edit fixed with a toast.
+- Staff, admin and legal pages lazy-loaded. No server change, no API change.
+
+### Tests executed (2026-11-13, Node v22.13.1)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm install` | 3 new client dependencies: lucide-react 1.72.0, @fontsource-variable/inter 5.3.0, clsx 2.1.1 | 0 |
+| `npm run test:server` | Test Suites: 36 passed, 36 total; Tests: 396 passed, 396 total (server unchanged) | 0 |
+| `npm run test:client` | Test Files 16 passed (16); Tests 80 passed (80) | 0 |
+| `npm test` | 396 server + 80 client passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | main JS 359.20 kB (106.83 kB gzip), was 485.12 kB (143.11 kB gzip); CSS 67.74 kB (12.47 kB gzip) | 0 |
+| `npm audit --omit=dev` | found 0 vulnerabilities | 0 |
+| Production smoke | `--production` build on port 5050 with the showcase data, headless Chrome at 1440 and 390 px: 58 page checks, no horizontal overflow, no CSP violations, no JS errors; keyboard-only pass OK; 26 screenshots in `docs/screenshots/` | — |
+
+### Limitations
+
+- The case desk table scrolls horizontally inside its card below about 1600 px (nine columns).
+- Toasts are polite live regions only; there is no notification history for them.
 
 ## Phase 7 — details
 
-**Status:** Implemented — awaiting architect review (not yet passed).
+**Status:** Passed (architect-reviewed 2026-11-12).
 
 ### Implemented
 

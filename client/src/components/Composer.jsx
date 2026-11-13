@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Button, ErrorAlert, TextAreaField } from './ui.jsx'
+import clsx from 'clsx'
+import { Eye, HelpCircle, Lock, MessageSquare, Send } from 'lucide-react'
+import { Button, ErrorAlert, Tabs, TextAreaField } from './ui/index.js'
 
 const TABS = [
   { value: 'message', label: 'Message student', min: 1, max: 3000, action: 'Send message' },
@@ -40,43 +42,37 @@ export default function Composer({ closed, onSubmit }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-      <div role="tablist" aria-label="Composer" className="flex flex-wrap gap-2">
-        {available.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            role="tab"
-            aria-selected={item.value === tab.value}
-            onClick={() => {
-              setKind(item.value)
-              setError('')
-            }}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              item.value === tab.value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {item.value === 'note' && <span aria-hidden="true">🔒 </span>}
-            {item.label}
-          </button>
-        ))}
-      </div>
+    <form onSubmit={submit} className={clsx('space-y-4 rounded-2xl bg-white p-5 shadow-card ring-1', tab.value === 'note' ? 'ring-slate-300' : 'ring-slate-900/5')}>
+      <Tabs
+        label="Composer"
+        size="sm"
+        value={tab.value}
+        onChange={(value) => {
+          setKind(value)
+          setError('')
+        }}
+        tabs={available.map((item) => ({ value: item.value, label: item.label, icon: item.value === 'note' ? Lock : item.value === 'info' ? HelpCircle : MessageSquare }))}
+      />
       {tab.value === 'note' ? (
-        <p className="flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-800">
-          <span aria-hidden="true">🔒</span> Never shown to the student
+        <p className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-medium text-slate-800">
+          <Lock className="h-4 w-4 text-slate-500" aria-hidden="true" />
+          <span>Never shown to the student</span>
         </p>
       ) : (
-        <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        <p className="flex items-center gap-2 rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-950 ring-1 ring-inset ring-sky-600/15">
+          <Eye className="h-4 w-4 shrink-0 text-sky-600" aria-hidden="true" />
           {tab.value === 'info'
             ? 'The student sees this request and the case moves to "Awaiting student".'
             : 'The student sees this message on their request timeline.'}
         </p>
       )}
-      <TextAreaField label={tab.label} rows={4} value={text} onChange={(event) => setText(event.target.value)} />
+      <TextAreaField label={tab.label} rows={4} value={text} onChange={(event) => setText(event.target.value)} className={tab.value === 'note' ? '[&_textarea]:bg-slate-50' : undefined} />
       <ErrorAlert message={error} />
-      <Button type="submit" disabled={busy}>
-        {busy ? 'Saving…' : tab.action}
-      </Button>
+      <div className="flex justify-end">
+        <Button type="submit" icon={tab.value === 'note' ? Lock : Send} loading={busy}>
+          {busy ? 'Saving…' : tab.action}
+        </Button>
+      </div>
     </form>
   )
 }

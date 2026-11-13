@@ -15,14 +15,15 @@ export const STUDENT_STATUS_LABELS = Object.freeze({
   dismissed: 'Closed',
 })
 
-export const STATUS_BADGE_CLASSES = Object.freeze({
-  submitted: 'bg-slate-100 text-slate-800',
-  under_review: 'bg-blue-100 text-blue-800',
-  awaiting_student: 'bg-amber-100 text-amber-900',
-  confirmed_fraud: 'bg-red-100 text-red-800',
-  verified_genuine: 'bg-emerald-100 text-emerald-800',
-  inconclusive: 'bg-violet-100 text-violet-800',
-  dismissed: 'bg-slate-200 text-slate-700',
+// Badge tone per status (semantic colours only: danger = fraud, success = verified, warning = needs reply).
+export const STATUS_TONES = Object.freeze({
+  submitted: 'neutral',
+  under_review: 'info',
+  awaiting_student: 'warning',
+  confirmed_fraud: 'danger',
+  verified_genuine: 'success',
+  inconclusive: 'violet',
+  dismissed: 'neutral',
 })
 
 export const CHANNEL_LABELS = Object.freeze({

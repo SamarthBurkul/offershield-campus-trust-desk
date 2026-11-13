@@ -64,7 +64,7 @@ afterEach(() => {
 
 describe('LookupResultCard', () => {
   it.each([
-    ['confirmed_fraud', 'bg-red-50', /fraudulent offer on .*Do not pay or share documents.*call 1930.*cybercrime\.gov\.in/],
+    ['confirmed_fraud', 'bg-rose-50', /fraudulent offer on .*Do not pay or share documents.*call 1930.*cybercrime\.gov\.in/],
     ['lookalike_warning', 'bg-amber-50', /looks similar to infosys\.com \(Infosys\).*different address/],
     ['verified', 'bg-emerald-50', /Infosys was verified by your placement cell on .* using: Called the official company number, Checked the official careers page\. Valid until .*come only from: infosys\.com/],
     ['verified_expired', 'bg-slate-100', /Verification expired on /],
@@ -181,9 +181,15 @@ describe('RegistryPage', () => {
     listRecruiters.mockResolvedValue(recruiters)
     renderAt('/staff/registry')
 
+    const u = userEvent.setup()
     expect(await screen.findByRole('button', { name: 'Approve' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Renew' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Suspend' })).toHaveLength(2)
+    // Phase 8: Renew and Suspend live in each row's actions menu.
+    await u.click(screen.getByRole('button', { name: 'Actions for Infosys' }))
+    expect(screen.getByRole('menuitem', { name: 'Renew' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Suspend' })).toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: 'Actions for Pending Co' }))
+    expect(screen.getByRole('menuitem', { name: 'Suspend' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Renew' })).not.toBeInTheDocument()
     expect(screen.getByText('Pending approval')).toBeInTheDocument()
   })
 
@@ -196,6 +202,7 @@ describe('RegistryPage', () => {
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Renew' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Actions for/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add recruiter' })).toBeInTheDocument()
   })
 })

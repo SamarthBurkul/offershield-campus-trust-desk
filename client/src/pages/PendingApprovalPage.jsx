@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
-import { Button, Card } from '../components/ui.jsx'
+import { Hourglass, LogOut, RefreshCw } from 'lucide-react'
+import { Alert, Button, Card } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 
 /** Shown to students of a manual-approval college until a placement officer or the TPO head approves them. */
@@ -28,8 +29,13 @@ export default function PendingApprovalPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Waiting for your placement cell to approve your account</h1>
+    <div className="mx-auto max-w-xl space-y-6 py-4">
+      <div className="flex flex-col items-center text-center">
+        <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-200" aria-hidden="true">
+          <Hourglass className="h-7 w-7" />
+        </span>
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight text-slate-900">Waiting for your placement cell to approve your account</h1>
+      </div>
       <Card>
         <p className="text-slate-700">
           Your account{college ? ` at ${college.name}` : ''} was created. Because your college does not issue student email
@@ -39,12 +45,12 @@ export default function PendingApprovalPage() {
           This usually happens within a working day. If it takes longer, ask your placement cell to approve
           <span className="font-medium"> {user.email}</span>.
         </p>
-        {stillPending && <p className="text-sm text-slate-600">Not approved yet. Please check again later.</p>}
+        {stillPending && <Alert variant="warning">Not approved yet. Please check again later.</Alert>}
         <div className="flex flex-wrap gap-3">
-          <Button onClick={checkAgain} disabled={checking}>
+          <Button icon={RefreshCw} loading={checking} onClick={checkAgain}>
             {checking ? 'Checking…' : 'Check again'}
           </Button>
-          <Button variant="secondary" onClick={handleLogout}>
+          <Button variant="secondary" icon={LogOut} onClick={handleLogout}>
             Log out
           </Button>
         </div>

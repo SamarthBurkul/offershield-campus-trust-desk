@@ -1,3 +1,4 @@
+import { AtSign, BadgeCheck, Ban, CheckCircle2, Globe, Link2, MoreHorizontal, Phone, Plus, RefreshCcw, ShieldAlert, Wallet } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
@@ -6,28 +7,48 @@ import { ROLES } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import RecruiterForm from '../components/RecruiterForm.jsx'
-import { Button, Card, CheckboxField, ErrorAlert, TextAreaField } from '../components/ui.jsx'
+import {
+  Badge,
+  Button,
+  Card,
+  CheckboxField,
+  CodeChip,
+  Drawer,
+  DropdownMenu,
+  EmptyState,
+  ErrorAlert,
+  PageHeader,
+  Skeleton,
+  Table,
+  Tabs,
+  TBody,
+  Td,
+  TextAreaField,
+  Th,
+  THead,
+  Tr,
+  useToast,
+} from '../components/ui/index.js'
 import { INDICATOR_TYPE_LABELS } from '../constants/caseStatus.js'
 import { RECRUITER_STATUS_LABELS, VERIFICATION_METHOD_LABELS } from '../constants/verificationMethods.js'
 import usePageTitle from '../hooks/usePageTitle.js'
-import Skeleton from '../components/Skeleton.jsx'
-import EmptyState from '../components/EmptyState.jsx'
+import { formatDate } from '../utils/format.js'
 
 const TABS = [
-  { value: 'recruiters', label: 'Recruiters' },
-  { value: 'indicators', label: 'Confirmed indicators' },
+  { value: 'recruiters', label: 'Recruiters', icon: BadgeCheck },
+  { value: 'indicators', label: 'Confirmed indicators', icon: ShieldAlert },
 ]
-const day = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—')
+const TYPE_ICONS = { domain: Globe, url: Link2, email: AtSign, phone: Phone, upi: Wallet }
 const toggle = (list, value) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value])
 
 function RecruiterStatus({ recruiter }) {
-  if (recruiter.isExpired) return <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">Expired</span>
-  const classes = {
-    pending_approval: 'bg-amber-100 text-amber-900',
-    verified: 'bg-emerald-100 text-emerald-800',
-    suspended: 'bg-slate-200 text-slate-700',
-  }
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${classes[recruiter.status]}`}>{RECRUITER_STATUS_LABELS[recruiter.status]}</span>
+  if (recruiter.isExpired) return <Badge tone="neutral">Expired</Badge>
+  const tones = { pending_approval: 'warning', verified: 'success', suspended: 'neutral' }
+  return (
+    <Badge tone={tones[recruiter.status] ?? 'neutral'} dot>
+      {RECRUITER_STATUS_LABELS[recruiter.status]}
+    </Badge>
+  )
 }
 
 /** Head-only dialogs: renew (methods + note) and suspend / revoke (reason). */
@@ -47,7 +68,7 @@ function ActionDialog({ action, onDone, onCancel }) {
     setBusy(true)
     try {
       await action.run(isRenew ? { methods, evidenceNote: text.trim() } : text.trim())
-      onDone()
+      onDone(action)
     } catch (err) {
       setError(errorMessage(err))
       setBusy(false)
@@ -57,8 +78,8 @@ function ActionDialog({ action, onDone, onCancel }) {
   return (
     <ConfirmDialog title={action.title} confirmLabel={action.confirmLabel} danger={!isRenew} busy={busy} onConfirm={confirm} onCancel={onCancel}>
       {isRenew && (
-        <fieldset className="space-y-1">
-          <legend className="font-medium">Verification methods</legend>
+        <fieldset className="space-y-1.5">
+          <legend className="mb-1 font-medium text-slate-800">Verification methods</legend>
           {Object.entries(VERIFICATION_METHOD_LABELS).map(([value, label]) => (
             <CheckboxField key={value} label={label} checked={methods.includes(value)} onChange={() => setMethods(toggle(methods, value))} />
           ))}
@@ -71,6 +92,7 @@ function ActionDialog({ action, onDone, onCancel }) {
 }
 
 function RecruitersTab({ isHead }) {
+  const toast = useToast()
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -93,6 +115,7 @@ function RecruitersTab({ isHead }) {
     setError('')
     try {
       await registry.approveRecruiter(recruiter.id)
+      toast.success(`${recruiter.companyName} is now verified.`)
       reload()
     } catch (err) {
       setError(errorMessage(err))
@@ -100,9 +123,107 @@ function RecruitersTab({ isHead }) {
   }
 
   return (
-    <div className="space-y-4">
-      {creating ? (
-        <Card title="Add recruiter">
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <p className="text-sm text-slate-600">Companies your placement cell verified, with their official domains and verification window.</p>
+        <Button icon={Plus} onClick={() => setCreating(true)}>
+          Add recruiter
+        </Button>
+      </div>
+      <div className="px-5 empty:hidden">
+        <ErrorAlert message={error} />
+        {!result && !error && <Skeleton rows={3} label="Loading recruiters" />}
+        {result?.recruiters.length === 0 && <EmptyState icon={BadgeCheck} title="No recruiters in the registry yet." className="mb-5" />}
+      </div>
+      {result?.recruiters.length > 0 && (
+        <Table label="Recruiters">
+          <THead>
+            <tr>
+              <Th>Company</Th>
+              <Th>Domains</Th>
+              <Th>Status</Th>
+              <Th>Verified → expires</Th>
+              {isHead && <Th className="text-right">Actions</Th>}
+            </tr>
+          </THead>
+          <TBody>
+            {result.recruiters.map((recruiter) => {
+              const muted = recruiter.isExpired || recruiter.status === 'suspended'
+              return (
+                <Tr key={recruiter.id} muted={muted}>
+                  <Td className={muted ? 'font-medium' : 'font-medium text-slate-900'}>{recruiter.companyName}</Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-1.5">
+                      {recruiter.domains.map((domain) => (
+                        <CodeChip key={domain} className={muted ? 'opacity-60' : undefined}>
+                          {domain}
+                        </CodeChip>
+                      ))}
+                    </div>
+                  </Td>
+                  <Td>
+                    <RecruiterStatus recruiter={recruiter} />
+                  </Td>
+                  <Td className="whitespace-nowrap text-xs tabular-nums">
+                    {formatDate(recruiter.verification.verifiedAt)} → {formatDate(recruiter.verification.expiresAt)}
+                  </Td>
+                  {isHead && (
+                    <Td className="whitespace-nowrap text-right">
+                      <div className="inline-flex items-center gap-2">
+                        {recruiter.status === 'pending_approval' && (
+                          <Button size="sm" variant="success" icon={CheckCircle2} onClick={() => approve(recruiter)}>
+                            Approve
+                          </Button>
+                        )}
+                        {recruiter.status !== 'suspended' && (
+                          <DropdownMenu
+                            label={`Actions for ${recruiter.companyName}`}
+                            buttonClassName="h-8 w-8 justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                            trigger={<MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
+                            items={[
+                              recruiter.status === 'verified' && {
+                                label: 'Renew',
+                                icon: RefreshCcw,
+                                onSelect: () =>
+                                  setAction({
+                                    kind: 'renew',
+                                    title: `Renew ${recruiter.companyName}`,
+                                    confirmLabel: 'Renew verification',
+                                    done: `${recruiter.companyName} verification renewed.`,
+                                    run: (verification) => registry.renewRecruiter(recruiter.id, verification),
+                                  }),
+                              },
+                              {
+                                label: 'Suspend',
+                                icon: Ban,
+                                tone: 'danger',
+                                onSelect: () =>
+                                  setAction({
+                                    kind: 'reason',
+                                    title: `Suspend ${recruiter.companyName}?`,
+                                    confirmLabel: 'Suspend',
+                                    done: `${recruiter.companyName} was suspended.`,
+                                    run: (reason) => registry.suspendRecruiter(recruiter.id, reason),
+                                  }),
+                              },
+                            ]}
+                          />
+                        )}
+                      </div>
+                    </Td>
+                  )}
+                </Tr>
+              )
+            })}
+          </TBody>
+        </Table>
+      )}
+      {creating && (
+        <Drawer
+          title="Add recruiter"
+          description={isHead ? 'Saved as a verified recruiter.' : 'Your TPO head approves it before students see it as verified.'}
+          onClose={() => setCreating(false)}
+        >
           <RecruiterForm
             isHead={isHead}
             onCancel={() => setCreating(false)}
@@ -113,86 +234,19 @@ function RecruitersTab({ isHead }) {
                 throw new Error(errorMessage(err))
               }
               setCreating(false)
+              toast.success(`${body.companyName} was added to the registry.`)
               reload()
             }}
           />
-        </Card>
-      ) : (
-        <Button onClick={() => setCreating(true)}>Add recruiter</Button>
-      )}
-      <ErrorAlert message={error} />
-      {!result && !error && <Skeleton rows={3} label="Loading recruiters" />}
-      {result?.recruiters.length === 0 && <EmptyState title="No recruiters in the registry yet." />}
-      {result?.recruiters.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-slate-500">
-              <tr>
-                <th className="py-2 pr-3 font-medium">Company</th>
-                <th className="py-2 pr-3 font-medium">Domains</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 pr-3 font-medium">Verified / expires</th>
-                {isHead && <th className="py-2 font-medium">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {result.recruiters.map((recruiter) => (
-                <tr key={recruiter.id} className={`align-top ${recruiter.isExpired || recruiter.status === 'suspended' ? 'text-slate-400' : ''}`}>
-                  <td className="py-2 pr-3 font-medium">{recruiter.companyName}</td>
-                  <td className="break-all py-2 pr-3 font-mono text-xs">{recruiter.domains.join(', ')}</td>
-                  <td className="py-2 pr-3">
-                    <RecruiterStatus recruiter={recruiter} />
-                  </td>
-                  <td className="py-2 pr-3 text-xs">
-                    {day(recruiter.verification.verifiedAt)} → {day(recruiter.verification.expiresAt)}
-                  </td>
-                  {isHead && (
-                    <td className="space-x-2 py-2 whitespace-nowrap">
-                      {recruiter.status === 'pending_approval' && <Button onClick={() => approve(recruiter)}>Approve</Button>}
-                      {recruiter.status === 'verified' && (
-                        <Button
-                          variant="secondary"
-                          onClick={() =>
-                            setAction({
-                              kind: 'renew',
-                              title: `Renew ${recruiter.companyName}`,
-                              confirmLabel: 'Renew verification',
-                              run: (verification) => registry.renewRecruiter(recruiter.id, verification),
-                            })
-                          }
-                        >
-                          Renew
-                        </Button>
-                      )}
-                      {recruiter.status !== 'suspended' && (
-                        <Button
-                          variant="danger"
-                          onClick={() =>
-                            setAction({
-                              kind: 'reason',
-                              title: `Suspend ${recruiter.companyName}?`,
-                              confirmLabel: 'Suspend',
-                              run: (reason) => registry.suspendRecruiter(recruiter.id, reason),
-                            })
-                          }
-                        >
-                          Suspend
-                        </Button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        </Drawer>
       )}
       {action && (
         <ActionDialog
           action={action}
           onCancel={() => setAction(null)}
-          onDone={() => {
+          onDone={(done) => {
             setAction(null)
+            toast.success(done.done)
             reload()
           }}
         />
@@ -202,6 +256,7 @@ function RecruitersTab({ isHead }) {
 }
 
 function IndicatorsTab({ isHead }) {
+  const toast = useToast()
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -219,66 +274,101 @@ function IndicatorsTab({ isHead }) {
   }, [reloadKey])
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-600">Created only by TPO-head confirmed_fraud decisions; revoked automatically when the source cases are reopened.</p>
-      <ErrorAlert message={error} />
-      {!result && !error && <Skeleton rows={3} label="Loading indicators" />}
-      {result?.indicators.length === 0 && <EmptyState title="No confirmed indicators yet.">They appear when the TPO head confirms a fraud case.</EmptyState>}
+    <div>
+      <p className="px-5 py-4 text-sm text-slate-600">
+        Created only by TPO-head confirmed_fraud decisions; revoked automatically when the source cases are reopened.
+      </p>
+      <div className="px-5 empty:hidden">
+        <ErrorAlert message={error} />
+        {!result && !error && <Skeleton rows={3} label="Loading indicators" />}
+        {result?.indicators.length === 0 && (
+          <EmptyState icon={ShieldAlert} title="No confirmed indicators yet." className="mb-5">
+            They appear when the TPO head confirms a fraud case.
+          </EmptyState>
+        )}
+      </div>
       {result?.indicators.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-slate-500">
-              <tr>
-                <th className="py-2 pr-3 font-medium">Type</th>
-                <th className="py-2 pr-3 font-medium">Value</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 pr-3 font-medium">Source cases</th>
-                <th className="py-2 pr-3 font-medium">Confirmed</th>
-                {isHead && <th className="py-2 font-medium">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {result.indicators.map((indicator) => (
-                <tr key={indicator.id} className={`align-top ${indicator.status === 'revoked' ? 'text-slate-400' : ''}`}>
-                  <td className="py-2 pr-3">{INDICATOR_TYPE_LABELS[indicator.type] ?? indicator.type}</td>
-                  <td className="break-all py-2 pr-3 font-mono text-xs">{indicator.value}</td>
-                  <td className="py-2 pr-3">
-                    {indicator.status === 'active' ? 'Active' : `Revoked${indicator.revokeReason === 'source_case_reopened' ? ' (case reopened)' : ''}`}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {indicator.sourceCases.map((item) => (
-                      <Link key={item.id} to={`/staff/cases/${item.id}`} className="mr-2 font-mono text-xs text-blue-700 hover:underline">
-                        {item.caseNumber ?? item.id}
-                      </Link>
-                    ))}
-                  </td>
-                  <td className="py-2 pr-3 text-xs">{day(indicator.lastConfirmedAt)}</td>
+        <Table label="Confirmed indicators">
+          <THead>
+            <tr>
+              <Th>Type</Th>
+              <Th>Value</Th>
+              <Th>Status</Th>
+              <Th>Source cases</Th>
+              <Th>Confirmed</Th>
+              {isHead && <Th className="text-right">Actions</Th>}
+            </tr>
+          </THead>
+          <TBody>
+            {result.indicators.map((indicator) => {
+              const Icon = TYPE_ICONS[indicator.type] ?? Globe
+              const revoked = indicator.status === 'revoked'
+              return (
+                <Tr key={indicator.id} muted={revoked}>
+                  <Td className="whitespace-nowrap">
+                    <span className="inline-flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                      {INDICATOR_TYPE_LABELS[indicator.type] ?? indicator.type}
+                    </span>
+                  </Td>
+                  <Td>
+                    <CodeChip tone={revoked ? 'neutral' : 'danger'}>{indicator.value}</CodeChip>
+                  </Td>
+                  <Td>
+                    {revoked ? (
+                      <Badge tone="neutral">Revoked{indicator.revokeReason === 'source_case_reopened' ? ' (case reopened)' : ''}</Badge>
+                    ) : (
+                      <Badge tone="danger" dot>
+                        Active
+                      </Badge>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-2">
+                      {indicator.sourceCases.map((item) => (
+                        <Link key={item.id} to={`/staff/cases/${item.id}`} className="font-mono text-xs font-medium text-accent-700 hover:underline">
+                          {item.caseNumber ?? item.id}
+                        </Link>
+                      ))}
+                    </div>
+                  </Td>
+                  <Td className="whitespace-nowrap text-xs tabular-nums">{formatDate(indicator.lastConfirmedAt)}</Td>
                   {isHead && (
-                    <td className="py-2">
-                      {indicator.status === 'active' && (
+                    <Td className="text-right">
+                      {!revoked && (
                         <Button
-                          variant="danger"
+                          variant="ghost"
+                          size="sm"
+                          icon={Ban}
+                          className="text-rose-700! hover:bg-rose-50! hover:text-rose-800!"
                           onClick={() =>
-                            setAction({ kind: 'reason', title: `Revoke ${indicator.value}?`, confirmLabel: 'Revoke', run: (reason) => registry.revokeIndicator(indicator.id, reason) })
+                            setAction({
+                              kind: 'reason',
+                              title: `Revoke ${indicator.value}?`,
+                              confirmLabel: 'Revoke',
+                              done: `${indicator.value} was revoked.`,
+                              run: (reason) => registry.revokeIndicator(indicator.id, reason),
+                            })
                           }
                         >
                           Revoke
                         </Button>
                       )}
-                    </td>
+                    </Td>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </Tr>
+              )
+            })}
+          </TBody>
+        </Table>
       )}
       {action && (
         <ActionDialog
           action={action}
           onCancel={() => setAction(null)}
-          onDone={() => {
+          onDone={(done) => {
             setAction(null)
+            toast.success(done.done)
             setReloadKey((key) => key + 1)
           }}
         />
@@ -295,22 +385,16 @@ export default function RegistryPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">College registry</h1>
-      <div role="tablist" aria-label="Registry" className="flex gap-2">
-        {TABS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.value}
-            onClick={() => setTab(item.value)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === item.value ? 'bg-blue-700 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-300'}`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <Card>{tab === 'recruiters' ? <RecruitersTab isHead={isHead} /> : <IndicatorsTab isHead={isHead} />}</Card>
+      <PageHeader
+        title="College registry"
+        description="What students see when they check before they pay: verified recruiters and contacts confirmed as fraud by your TPO head."
+      />
+      <Card padded={false}>
+        <div className="px-5 pt-2">
+          <Tabs label="Registry" value={tab} onChange={setTab} tabs={TABS} />
+        </div>
+        {tab === 'recruiters' ? <RecruitersTab isHead={isHead} /> : <IndicatorsTab isHead={isHead} />}
+      </Card>
     </div>
   )
 }

@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { acknowledgeAdvisory, getAdvisory } from '../api/advisories.js'
 import { errorMessage } from '../api/errors.js'
 import AdvisoryCard from '../components/AdvisoryCard.jsx'
-import Skeleton from '../components/Skeleton.jsx'
-import { Button, ErrorAlert } from '../components/ui.jsx'
+import { ArrowLeft, Check, CheckCircle2, Undo2 } from 'lucide-react'
+import { Button, EmptyState, ErrorAlert, Skeleton } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 
 export default function AdvisoryDetailPage() {
@@ -38,25 +38,26 @@ export default function AdvisoryDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link to="/advisories" className="text-sm font-medium text-blue-700 hover:underline">
-        ← All advisories
+      <Link to="/advisories" className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 transition hover:text-accent-700">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> All advisories
       </Link>
       <ErrorAlert message={error} />
       {!advisory && !error && <Skeleton rows={2} label="Loading advisory" />}
       {advisory?.status === 'withdrawn' && (
-        <section className="space-y-2 rounded-lg border border-slate-300 bg-slate-50 p-5">
-          <h1 className="text-xl font-semibold text-slate-900">This advisory was withdrawn</h1>
-          <p className="text-sm text-slate-700">Your placement cell withdrew this advisory. Check your advisories list for the latest guidance.</p>
-        </section>
+        <EmptyState icon={Undo2} as="h1" title="This advisory was withdrawn">
+          Your placement cell withdrew this advisory. Check your advisories list for the latest guidance.
+        </EmptyState>
       )}
       {advisory && advisory.status !== 'withdrawn' && (
         <>
           <h1 className="sr-only">{advisory.title}</h1>
           <AdvisoryCard advisory={advisory}>
             {advisory.acknowledged ? (
-              <p className="text-sm font-medium">✓ You have read this</p>
+              <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> You have read this
+              </p>
             ) : (
-              <Button disabled={busy} onClick={acknowledge}>
+              <Button icon={Check} loading={busy} onClick={acknowledge}>
                 I&apos;ve read this
               </Button>
             )}

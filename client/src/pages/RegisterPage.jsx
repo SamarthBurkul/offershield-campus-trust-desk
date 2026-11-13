@@ -1,12 +1,20 @@
+import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
-import { Button, Card, ErrorAlert, SelectField, TextField } from '../components/ui.jsx'
+import AuthLayout from '../components/layout/AuthLayout.jsx'
+import { Button, Card, ErrorAlert, SelectField, TextField } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 
 const EMPTY = { name: '', email: '', password: '', collegeCode: '', joinCode: '', year: '1', branch: '', acceptPolicies: false }
+
+const POINTS = [
+  { title: 'Your college, only', body: 'Register with the college code and join code from your placement cell. Other colleges never see your data.' },
+  { title: 'No college email?', body: 'Use your personal email. Your placement cell approves your account before you can use the desk.' },
+  { title: 'Never asked for ID numbers', body: 'OfferShield never asks for Aadhaar, PAN, bank details or OTPs.' },
+]
 
 export default function RegisterPage() {
   usePageTitle('Student registration')
@@ -38,14 +46,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold text-slate-900">Student registration</h1>
-        <p className="text-sm text-slate-600">
-          Use your college email address. If your college does not issue student email addresses, use your personal email:
-          your placement cell will approve your account. They also give you the college code and join code.
-        </p>
-      </div>
+    <AuthLayout eyebrow="For students" description="Check before you pay. Ask before you share." points={POINTS} title="Student registration">
+      <p className="-mt-3 text-sm leading-6 text-slate-600">
+        Use your college email address. If your college does not issue student email addresses, use your personal email:
+        your placement cell will approve your account. They also give you the college code and join code.
+      </p>
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <ErrorAlert message={error} />
@@ -68,11 +73,11 @@ export default function RegisterPage() {
             value={form.password}
             onChange={update('password')}
           />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextField label="College code" required value={form.collegeCode} onChange={update('collegeCode')} />
             <TextField label="Join code" required autoComplete="off" value={form.joinCode} onChange={update('joinCode')} />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <SelectField label="Year" value={form.year} onChange={update('year')}>
               {[1, 2, 3, 4, 5].map((year) => (
                 <option key={year} value={year}>
@@ -82,37 +87,37 @@ export default function RegisterPage() {
             </SelectField>
             <TextField label="Branch" required hint="For example COMP, IT or EXTC." value={form.branch} onChange={update('branch')} />
           </div>
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 ring-1 ring-inset ring-slate-200">
             <input
               id="accept-policies"
               type="checkbox"
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700"
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-accent-600"
               checked={form.acceptPolicies}
               onChange={(event) => setForm((current) => ({ ...current, acceptPolicies: event.target.checked }))}
             />
-            <label htmlFor="accept-policies" className="text-sm text-slate-800">
+            <label htmlFor="accept-policies" className="cursor-pointer text-sm leading-5 text-slate-800">
               I have read and accept the{' '}
-              <Link to="/privacy" target="_blank" className="font-medium text-blue-700 hover:underline">
+              <Link to="/privacy" target="_blank" className="font-medium text-accent-700 underline underline-offset-2">
                 privacy notice
               </Link>{' '}
               and the{' '}
-              <Link to="/terms" target="_blank" className="font-medium text-blue-700 hover:underline">
+              <Link to="/terms" target="_blank" className="font-medium text-accent-700 underline underline-offset-2">
                 terms of use
               </Link>
               .
             </label>
           </div>
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" size="lg" icon={UserPlus} loading={submitting} className="w-full">
             {submitting ? 'Creating account…' : 'Create account'}
           </Button>
         </form>
       </Card>
-      <p className="text-sm text-slate-600">
+      <p className="text-center text-sm text-slate-600">
         Already registered?{' '}
-        <Link to="/login" className="font-medium text-blue-700 hover:underline">
+        <Link to="/login" className="font-semibold text-accent-700 hover:text-accent-800">
           Sign in
         </Link>
       </p>
-    </div>
+    </AuthLayout>
   )
 }

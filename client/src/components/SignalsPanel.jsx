@@ -1,6 +1,15 @@
+import clsx from 'clsx'
+import { AlertTriangle, Info, OctagonAlert, RefreshCw, Sparkles } from 'lucide-react'
 import { useState } from 'react'
-import { SIGNAL_LABELS, SIGNAL_SEVERITY_CLASSES } from '../constants/verificationMethods.js'
-import { Button, Card, ErrorAlert } from './ui.jsx'
+import { SIGNAL_LABELS, SIGNAL_SEVERITY_TONES } from '../constants/verificationMethods.js'
+import { formatDateTime, relativeTime } from '../utils/format.js'
+import { Badge, Button, Card, ErrorAlert } from './ui/index.js'
+
+const SEVERITY_STYLE = {
+  danger: { box: 'bg-rose-50 ring-rose-600/20 text-rose-950', icon: OctagonAlert, iconClass: 'text-rose-600' },
+  warning: { box: 'bg-amber-50 ring-amber-600/25 text-amber-950', icon: AlertTriangle, iconClass: 'text-amber-600' },
+  neutral: { box: 'bg-slate-50 ring-slate-300 text-slate-800', icon: Info, iconClass: 'text-slate-500' },
+}
 
 function detailText(signal) {
   const d = signal.detail ?? {}
@@ -30,27 +39,38 @@ export default function SignalsPanel({ signals = [], computedAt, onRecompute }) 
   }
 
   return (
-    <Card title="Warning signals">
-      <p className="text-xs font-medium text-slate-600">Automated hints — not a decision</p>
+    <Card title="Warning signals" icon={Sparkles}>
+      <p className="-mt-1 text-xs font-medium text-slate-600">Automated hints — not a decision</p>
       {signals.length === 0 ? (
         <p className="text-sm text-slate-600">No warning signals.</p>
       ) : (
         <ul className="space-y-2" aria-label="Warning signals">
-          {signals.map((signal) => (
-            <li key={signal.code} className={`rounded-md border px-3 py-2 text-sm ${SIGNAL_SEVERITY_CLASSES[signal.severity]}`}>
-              <p className="font-medium">
-                {SIGNAL_LABELS[signal.code] ?? signal.code} <span className="text-xs uppercase opacity-75">· {signal.severity}</span>
-              </p>
-              <p>{signal.message}</p>
-              {detailText(signal) && <p className="break-all text-xs opacity-80">{detailText(signal)}</p>}
-            </li>
-          ))}
+          {signals.map((signal) => {
+            const tone = SIGNAL_SEVERITY_TONES[signal.severity] ?? 'neutral'
+            const style = SEVERITY_STYLE[tone]
+            const Icon = style.icon
+            return (
+              <li key={signal.code} className={clsx('flex gap-2.5 rounded-xl px-3 py-2.5 text-sm ring-1 ring-inset', style.box)}>
+                <Icon className={clsx('mt-0.5 h-4 w-4 shrink-0', style.iconClass)} aria-hidden="true" />
+                <div className="min-w-0 space-y-0.5">
+                  <p className="flex flex-wrap items-center gap-2 font-medium">
+                    {SIGNAL_LABELS[signal.code] ?? signal.code}
+                    <Badge tone={tone} size="sm">
+                      {signal.severity}
+                    </Badge>
+                  </p>
+                  <p className="leading-5">{signal.message}</p>
+                  {detailText(signal) && <p className="break-all text-xs opacity-80">{detailText(signal)}</p>}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
       <ErrorAlert message={error} />
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-        <span>{computedAt ? `Computed ${new Date(computedAt).toLocaleString()}` : 'Not computed yet'}</span>
-        <Button variant="secondary" disabled={busy} onClick={recompute}>
+        <span title={computedAt ? formatDateTime(computedAt) : undefined}>{computedAt ? `Computed ${relativeTime(computedAt)}` : 'Not computed yet'}</span>
+        <Button variant="secondary" size="sm" icon={RefreshCw} loading={busy} onClick={recompute}>
           {busy ? 'Recomputing…' : 'Recompute'}
         </Button>
       </div>

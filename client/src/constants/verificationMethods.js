@@ -21,11 +21,8 @@ export const SIGNAL_LABELS = Object.freeze({
   DOCUMENTS_SHARED: 'Documents shared',
 })
 
-export const SIGNAL_SEVERITY_CLASSES = Object.freeze({
-  high: 'border-red-300 bg-red-50 text-red-900',
-  warning: 'border-amber-300 bg-amber-50 text-amber-900',
-  info: 'border-slate-300 bg-slate-50 text-slate-800',
-})
+// Signal severity → badge / alert tone.
+export const SIGNAL_SEVERITY_TONES = Object.freeze({ high: 'danger', warning: 'warning', info: 'neutral' })
 
 export const RELATED_REASON_LABELS = Object.freeze({
   shared_indicator: 'Shared contact detail',

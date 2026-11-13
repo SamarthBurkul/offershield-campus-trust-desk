@@ -102,6 +102,7 @@ Documented exceptions to "models only via repositories":
 - `ProtectedRoute allowedRoles={…}`: unauthenticated → `/login`; `mustChangePassword` → `/change-password`; wrong role → Forbidden page.
 - API modules `api/auth.js`, `api/admin.js`, `api/staff.js` all use the single axios instance (`api/client.js`).
 - Routes: `/`, `/login`, `/register`, `/change-password`, `/student`, `/student/requests`, `/student/requests/new`, `/student/requests/:id`, `/staff`, `/staff/members`, `/staff/cases`, `/staff/cases/:id`, `/staff/registry`, `/staff/audit` (TPO head), `/admin`, `/admin/colleges/:id`. After login: student → `/student`, staff → `/staff`, super admin → `/admin`.
+- Presentation (Phase 8, [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)): `App` wraps routes in `AuthProvider` → `ToastProvider` → `NavCountsProvider`. `components/Layout.jsx` picks the shell — `layout/PublicLayout` (signed out and the landing/login/register pages), `layout/StudentShell` (navy top bar) or `layout/AppShell` (navy sidebar, top bar with quick lookup, bell and user menu) — without touching `ProtectedRoute` or any permission. Sidebar count badges come from data pages already fetched (`NavCountsProvider`), never from extra requests. Staff, admin and legal pages are `React.lazy` chunks. All dates and money go through `utils/format.js` (en-IN).
 
 ## Case state machine
 

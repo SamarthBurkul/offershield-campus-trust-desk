@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.js'
 import ForbiddenPage from '../pages/ForbiddenPage.jsx'
+import { Spinner } from './ui/index.js'
 
 /**
  * Gate for signed-in areas. The server enforces every rule again; this only keeps the UI honest.
@@ -12,8 +13,8 @@ export default function ProtectedRoute({ allowedRoles }) {
 
   if (loading) {
     return (
-      <p role="status" className="text-slate-600">
-        Loading your session…
+      <p role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+        <Spinner /> Loading your session…
       </p>
     )
   }

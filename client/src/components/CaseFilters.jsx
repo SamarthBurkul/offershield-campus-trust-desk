@@ -1,37 +1,55 @@
+import { Search, X } from 'lucide-react'
 import { useState } from 'react'
 import { CHANNEL_LABELS, PRIORITY_LABELS, QUEUE_TABS } from '../constants/caseStatus.js'
-import { Button, SelectField, TextField } from './ui.jsx'
+import { Button, SelectField, Tabs, TextField } from './ui/index.js'
 
 /**
- * Queue tabs, filters and search. `values` mirrors the URL search params; `onChange(patch)`
- * merges a partial update (and the page resets to 1).
+ * Queue tabs (with counts when known), filters and search. `values` mirrors the URL search params;
+ * `onChange(patch)` merges a partial update (and the page resets to 1).
  */
-export default function CaseFilters({ values, onChange }) {
+export default function CaseFilters({ values, onChange, counts }) {
   const [search, setSearch] = useState(values.q ?? '')
 
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Case status" className="flex flex-wrap gap-2">
-        {QUEUE_TABS.map((tab) => {
-          const selected = (values.status || 'open') === tab.value
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              onClick={() => onChange({ status: tab.value })}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium ${
-                selected ? 'bg-blue-700 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
+      <Tabs
+        label="Case status"
+        value={values.status || 'open'}
+        onChange={(status) => onChange({ status })}
+        tabs={QUEUE_TABS.map((tab) => ({ ...tab, count: counts?.[tab.value] }))}
+      />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))] lg:items-end">
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onChange({ q: search.trim() })
+          }}
+        >
+          <TextField
+            label="Search cases"
+            className="min-w-0 flex-1"
+            placeholder="Case number, company, phone, UPI ID or domain"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <Button type="submit" icon={Search}>
+            Search
+          </Button>
+          {values.q && (
+            <Button
+              variant="ghost"
+              icon={X}
+              onClick={() => {
+                setSearch('')
+                onChange({ q: '' })
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </form>
         <SelectField label="Priority" value={values.priority ?? ''} onChange={(event) => onChange({ priority: event.target.value })}>
           <option value="">Any priority</option>
           {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
@@ -54,34 +72,6 @@ export default function CaseFilters({ values, onChange }) {
           ))}
         </SelectField>
       </div>
-
-      <form
-        className="flex flex-wrap items-end gap-3"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onChange({ q: search.trim() })
-        }}
-      >
-        <TextField
-          label="Search cases"
-          className="min-w-64 flex-1"
-          hint="Case number, company, phone, UPI ID or domain"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <Button type="submit">Search</Button>
-        {values.q && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setSearch('')
-              onChange({ q: '' })
-            }}
-          >
-            Clear
-          </Button>
-        )}
-      </form>
     </div>
   )
 }

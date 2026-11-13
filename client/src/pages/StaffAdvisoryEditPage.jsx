@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createAdvisory, getStaffAdvisory, publishAdvisory, updateAdvisory, withdrawAdvisory } from '../api/advisories.js'
 import { errorMessage } from '../api/errors.js'
 import { listIndicators } from '../api/registry.js'
@@ -9,8 +9,9 @@ import { useAuth } from '../auth/useAuth.js'
 import AdvisoryCard from '../components/AdvisoryCard.jsx'
 import AdvisoryEditor from '../components/AdvisoryEditor.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
-import Skeleton from '../components/Skeleton.jsx'
-import { Button, Card, ErrorAlert, TextAreaField } from '../components/ui.jsx'
+import { Skeleton } from '../components/ui/index.js'
+import { Megaphone, Undo2, Users } from 'lucide-react'
+import { Alert, Button, Card, ErrorAlert, PageHeader, ProgressBar, TextAreaField } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 
 /** Prefill from a confirmed_fraud case: no student identity, only the claimed company and confirmed indicators. */
@@ -61,38 +62,53 @@ function PublishedView({ advisory, isHead, onWithdraw }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <Card title={advisory.status === 'withdrawn' ? 'Withdrawn advisory' : 'Published advisory'}>
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <Card title={advisory.status === 'withdrawn' ? 'Withdrawn advisory' : 'Published advisory'} icon={Megaphone}>
         <AdvisoryCard advisory={advisory} />
         {advisory.needsReview && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <Alert variant="warning">
             Needs review: a linked indicator was revoked. Students no longer see it. Consider withdrawing and publishing a corrected advisory.
-          </p>
+          </Alert>
         )}
-        {advisory.status === 'withdrawn' && <p className="text-sm text-slate-700">Withdrawn: {advisory.withdrawReason}</p>}
+        {advisory.status === 'withdrawn' && <Alert variant="info">Withdrawn: {advisory.withdrawReason}</Alert>}
         {isHead && advisory.status === 'published' && (
-          <Button variant="danger" onClick={() => setWithdrawing(true)}>
+          <Button variant="danger" icon={Undo2} onClick={() => setWithdrawing(true)}>
             Withdraw advisory
           </Button>
         )}
       </Card>
-      <Card title="Acknowledgements">
-        <p className="text-2xl font-bold text-slate-900">{pct}%</p>
-        <p className="text-sm text-slate-600">
-          {advisory.acknowledgedCount} of {advisory.audienceCount ?? 0} students confirmed they read it.
-        </p>
+      <Card title="Acknowledgements" icon={Users} className="xl:self-start">
+        <div className="flex items-end justify-between gap-3">
+          <p className="text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">{pct}%</p>
+          <p className="text-sm text-slate-600">
+            {advisory.acknowledgedCount} of {advisory.audienceCount ?? 0} students confirmed they read it.
+          </p>
+        </div>
+        <ProgressBar value={advisory.ackRate ?? 0} label="Acknowledgement rate" tone="success" />
         {advisory.acknowledgementBreakdown && (
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <ul aria-label="By year">
-              {advisory.acknowledgementBreakdown.byYear.map((row) => (
-                <li key={row.year}>Year {row.year}: {row.count}</li>
-              ))}
-            </ul>
-            <ul aria-label="By branch">
-              {advisory.acknowledgementBreakdown.byBranch.map((row) => (
-                <li key={row.branch}>{row.branch}: {row.count}</li>
-              ))}
-            </ul>
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">By year</p>
+              <ul aria-label="By year" className="space-y-1">
+                {advisory.acknowledgementBreakdown.byYear.map((row) => (
+                  <li key={row.year} className="flex justify-between">
+                    <span>Year {row.year}</span>
+                    <span className="font-medium tabular-nums">{row.count}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">By branch</p>
+              <ul aria-label="By branch" className="space-y-1">
+                {advisory.acknowledgementBreakdown.byBranch.map((row) => (
+                  <li key={row.branch} className="flex justify-between">
+                    <span>{row.branch}</span>
+                    <span className="font-medium tabular-nums">{row.count}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
       </Card>
@@ -140,13 +156,11 @@ export default function StaffAdvisoryEditPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <Link to="/staff/advisories" className="text-sm font-medium text-blue-700 hover:underline">
-          ← Advisories
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900">{id ? 'Advisory' : 'New advisory'}</h1>
-        {fromCase && <p className="text-sm text-slate-600">Prefilled from a confirmed fraud case. Check the wording before saving.</p>}
-      </div>
+      <PageHeader
+        breadcrumb={[{ label: 'Advisories', to: '/staff/advisories' }, { label: id ? 'Advisory' : 'New advisory' }]}
+        title={id ? 'Advisory' : 'New advisory'}
+        description={fromCase ? 'Prefilled from a confirmed fraud case. Check the wording before saving.' : undefined}
+      />
       {state.loading && <Skeleton rows={4} label="Loading advisory" />}
       <ErrorAlert message={state.error} />
       {!state.loading && !state.error && (state.advisory && state.advisory.status !== 'draft' ? (

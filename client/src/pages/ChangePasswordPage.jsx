@@ -4,7 +4,8 @@ import { changePassword } from '../api/auth.js'
 import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
-import { Button, Card, ErrorAlert, TextField } from '../components/ui.jsx'
+import { KeyRound } from 'lucide-react'
+import { Alert, Button, Card, ErrorAlert, TextField } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 
 export default function ChangePasswordPage() {
@@ -36,14 +37,13 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold text-slate-900">Change password</h1>
-        {user?.mustChangePassword && (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            You signed in with a temporary password. Choose a new password to continue.
-          </p>
-        )}
+    <div className="mx-auto max-w-md space-y-6 py-2">
+      <div className="space-y-3">
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700" aria-hidden="true">
+          <KeyRound className="h-5 w-5" />
+        </span>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Change password</h1>
+        {user?.mustChangePassword && <Alert variant="warning">You signed in with a temporary password. Choose a new password to continue.</Alert>}
       </div>
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -73,7 +73,7 @@ export default function ChangePasswordPage() {
             value={form.confirmPassword}
             onChange={update('confirmPassword')}
           />
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" size="lg" loading={submitting} className="w-full">
             {submitting ? 'Saving…' : 'Change password'}
           </Button>
         </form>

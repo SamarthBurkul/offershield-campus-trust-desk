@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../api/notifications.js'
-import EmptyState from '../components/EmptyState.jsx'
-import Skeleton from '../components/Skeleton.jsx'
-import { Button, Card, CheckboxField, ErrorAlert } from '../components/ui.jsx'
+import clsx from 'clsx'
+import { BellOff, CheckCheck, ChevronRight } from 'lucide-react'
+import { Button, Card, CheckboxField, EmptyState, ErrorAlert, PageHeader, Pagination, Skeleton } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
-import { relativeTime } from '../utils/time.js'
+import { formatDateTime, relativeTime } from '../utils/format.js'
 
 const PAGE_SIZE = 20
 
@@ -38,53 +38,51 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">Notifications</h1>
-        <Button variant="secondary" onClick={() => markAllNotificationsRead().then(() => setReloadKey((key) => key + 1))}>
-          Mark all read
-        </Button>
-      </div>
-      <Card>
-        <CheckboxField
-          label="Unread only"
-          checked={unread}
-          onChange={(event) => {
-            setUnread(event.target.checked)
-            setPage(1)
-          }}
-        />
-        <ErrorAlert message={error} />
-        {!result && !error && <Skeleton rows={4} label="Loading notifications" />}
-        {result?.notifications.length === 0 && <EmptyState title={unread ? 'No unread notifications' : 'No notifications yet'} />}
+      <PageHeader
+        title="Notifications"
+        description="Updates on your requests, cases and advisories. Notifications are deleted after 180 days."
+        actions={
+          <Button variant="secondary" icon={CheckCheck} onClick={() => markAllNotificationsRead().then(() => setReloadKey((key) => key + 1))}>
+            Mark all read
+          </Button>
+        }
+      />
+      <Card padded={false}>
+        <div className="border-b border-slate-100 px-5 py-3">
+          <CheckboxField
+            label="Unread only"
+            checked={unread}
+            onChange={(event) => {
+              setUnread(event.target.checked)
+              setPage(1)
+            }}
+          />
+        </div>
+        <div className="p-5 empty:hidden">
+          <ErrorAlert message={error} />
+          {!result && !error && <Skeleton rows={4} label="Loading notifications" />}
+          {result?.notifications.length === 0 && <EmptyState icon={BellOff} title={unread ? 'No unread notifications' : 'No notifications yet'} />}
+        </div>
         {result?.notifications.length > 0 && (
           <ul className="divide-y divide-slate-100">
             {result.notifications.map((item) => (
               <li key={item.id}>
-                <button type="button" onClick={() => open(item)} className={`block w-full px-2 py-3 text-left hover:bg-slate-50 ${item.read ? '' : 'bg-blue-50/60'}`}>
-                  <span className="block font-medium text-slate-900">
-                    {!item.read && <span className="mr-1 text-blue-700" aria-label="Unread">●</span>}
-                    {item.title}
+                <button type="button" onClick={() => open(item)} className={clsx('flex w-full gap-3 px-5 py-4 text-left transition hover:bg-slate-50', !item.read && 'bg-accent-50/40')}>
+                  <span className={clsx('mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full', item.read ? 'bg-slate-200' : 'bg-accent-600')} aria-label={item.read ? undefined : 'Unread'} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-slate-900">{item.title}</span>
+                    <span className="mt-0.5 block text-sm text-slate-600">{item.body}</span>
+                    <span className="mt-1 block text-xs text-slate-400" title={formatDateTime(item.createdAt)}>
+                      {relativeTime(item.createdAt)}
+                    </span>
                   </span>
-                  <span className="block text-sm text-slate-600">{item.body}</span>
-                  <span className="block text-xs text-slate-400">{relativeTime(item.createdAt)}</span>
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />
                 </button>
               </li>
             ))}
           </ul>
         )}
-        {result && result.total > PAGE_SIZE && (
-          <div className="flex items-center justify-between pt-2 text-sm">
-            <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Previous
-            </Button>
-            <span className="text-slate-600">
-              Page {page} of {pages}
-            </span>
-            <Button variant="secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>
-              Next
-            </Button>
-          </div>
-        )}
+        {result && <Pagination page={page} totalPages={pages} onPage={setPage} />}
       </Card>
     </div>
   )

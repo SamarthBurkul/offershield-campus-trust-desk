@@ -1,10 +1,18 @@
+import { KeyRound, LogIn } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { errorMessage } from '../api/errors.js'
 import { homePathForRole } from '../auth/roles.js'
 import { useAuth } from '../auth/useAuth.js'
-import { Button, Card, ErrorAlert, TextField } from '../components/ui.jsx'
+import AuthLayout from '../components/layout/AuthLayout.jsx'
+import { Alert, Button, Card, ErrorAlert, TextField } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
+
+const POINTS = [
+  { title: 'Check before you pay', body: 'Look up a UPI ID, website, email or phone number against what your placement cell has confirmed.' },
+  { title: 'Ask your placement cell', body: 'Send a suspicious offer with screenshots; staff investigate and tell you what they found.' },
+  { title: 'Private by design', body: 'Your requests and evidence are visible only to you and your college’s placement staff.' },
+]
 
 export default function LoginPage() {
   usePageTitle('Sign in')
@@ -37,42 +45,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Sign in</h1>
+    <AuthLayout eyebrow="Campus Recruitment Trust & Verification Desk" description="Check before you pay. Ask before you share." points={POINTS} title="Sign in">
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <ErrorAlert message={error} />
           <TextField label="Email" type="email" autoComplete="username" required value={form.email} onChange={update('email')} />
-          <TextField
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={form.password}
-            onChange={update('password')}
-          />
-          <Button type="submit" disabled={submitting} className="w-full">
+          <TextField label="Password" type="password" autoComplete="current-password" required value={form.password} onChange={update('password')} />
+          <Button type="submit" size="lg" icon={LogIn} loading={submitting} className="w-full">
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 border-t border-slate-100 pt-4 text-sm">
           <button
             type="button"
-            className="font-medium text-blue-700 hover:underline"
+            className="inline-flex items-center gap-1.5 font-medium text-accent-700 hover:text-accent-800"
             aria-expanded={showForgot}
             onClick={() => setShowForgot((value) => !value)}
           >
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
             Forgot password?
           </button>
-          {showForgot && <p className="text-slate-700">Ask your placement cell to reset it. They will give you a temporary password.</p>}
+          {showForgot && (
+            <Alert variant="info">Ask your placement cell to reset it. They will give you a temporary password.</Alert>
+          )}
         </div>
       </Card>
-      <p className="text-sm text-slate-600">
+      <p className="text-center text-sm text-slate-600">
         Student without an account?{' '}
-        <Link to="/register" className="font-medium text-blue-700 hover:underline">
+        <Link to="/register" className="font-semibold text-accent-700 hover:text-accent-800">
           Register as a student
         </Link>
       </p>
-    </div>
+    </AuthLayout>
   )
 }

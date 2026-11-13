@@ -1,13 +1,16 @@
+import clsx from 'clsx'
+import { AlertTriangle, ArrowRight, BadgeCheck, CircleHelp, Clock3, ShieldAlert } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { VERIFICATION_METHOD_LABELS } from '../constants/verificationMethods.js'
-import { Button } from './ui.jsx'
+import { formatDate } from '../utils/format.js'
+import { Button } from './ui/index.js'
 
 const STYLES = {
-  confirmed_fraud: 'border-red-300 bg-red-50 text-red-900',
-  lookalike_warning: 'border-amber-300 bg-amber-50 text-amber-900',
-  verified: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  verified_expired: 'border-slate-300 bg-slate-100 text-slate-700',
-  not_reviewed: 'border-slate-200 bg-white text-slate-800',
+  confirmed_fraud: { box: 'bg-rose-50 ring-rose-600/25 text-rose-950', icon: ShieldAlert, iconBox: 'bg-rose-600 text-white' },
+  lookalike_warning: { box: 'bg-amber-50 ring-amber-600/30 text-amber-950', icon: AlertTriangle, iconBox: 'bg-amber-500 text-white' },
+  verified: { box: 'bg-emerald-50 ring-emerald-600/25 text-emerald-950', icon: BadgeCheck, iconBox: 'bg-emerald-600 text-white' },
+  verified_expired: { box: 'bg-slate-100 ring-slate-400/40 text-slate-800', icon: Clock3, iconBox: 'bg-slate-500 text-white' },
+  not_reviewed: { box: 'bg-white ring-slate-300 text-slate-800', icon: CircleHelp, iconBox: 'bg-slate-200 text-slate-700' },
 }
 
 const TITLES = {
@@ -18,7 +21,7 @@ const TITLES = {
   not_reviewed: 'Not reviewed',
 }
 
-const day = (iso) => (iso ? new Date(iso).toLocaleDateString() : 'an unknown date')
+const day = (iso) => formatDate(iso, 'an unknown date')
 
 function message(result) {
   const recruiter = result.verifiedRecruiters?.find((item) => !item.isExpired) ?? result.verifiedRecruiters?.[0]
@@ -54,39 +57,48 @@ function prefillParams(query, queryType) {
 
 /**
  * One lookup result. Students get an "Ask your placement cell to verify" button; staff see source case
- * links on fraud matches (the server only sends those to staff).
+ * links on fraud matches (the server only sends those to staff). `preview` renders a static sample
+ * (landing page) that is not announced as a live result.
  */
-export default function LookupResultCard({ result, query, showAskButton = true }) {
+export default function LookupResultCard({ result, query, showAskButton = true, size = 'md', preview = false, className }) {
   const navigate = useNavigate()
+  const style = STYLES[result.resultStatus] ?? STYLES.not_reviewed
+  const Icon = style.icon
   const sourceCases = (result.fraudMatches ?? []).flatMap((match) => match.sourceCases ?? [])
+  const large = size === 'lg'
 
   return (
     <section
-      role="status"
-      aria-label="Lookup result"
+      role={preview ? 'group' : 'status'}
+      aria-label={preview ? `Sample lookup result: ${TITLES[result.resultStatus]}` : 'Lookup result'}
       data-status={result.resultStatus}
-      className={`space-y-3 rounded-lg border p-4 ${STYLES[result.resultStatus] ?? STYLES.not_reviewed}`}
+      className={clsx('flex flex-col gap-3 rounded-2xl ring-1 ring-inset sm:flex-row sm:gap-4', large ? 'p-5 sm:p-6' : 'p-4', style.box, className)}
     >
-      <h3 className="font-semibold">{TITLES[result.resultStatus] ?? 'Result'}</h3>
-      <p className="text-sm">{message(result)}</p>
-      {sourceCases.length > 0 && (
-        <p className="text-sm">
-          Source cases (staff only):{' '}
-          {sourceCases.map((item, index) => (
-            <span key={item.id}>
-              {index > 0 && ', '}
-              <Link to={`/staff/cases/${item.id}`} className="font-mono font-medium underline">
-                {item.caseNumber ?? item.id}
-              </Link>
-            </span>
-          ))}
-        </p>
-      )}
-      {showAskButton && (
-        <Button variant="secondary" onClick={() => navigate(`/student/requests/new?${prefillParams(query, result.queryType)}`)}>
-          Ask your placement cell to verify
-        </Button>
-      )}
+      <span className={clsx('inline-flex shrink-0 items-center justify-center rounded-xl shadow-sm', large ? 'h-12 w-12' : 'h-10 w-10', style.iconBox)} aria-hidden="true">
+        <Icon className={large ? 'h-6 w-6' : 'h-5 w-5'} />
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <h3 className={clsx('font-semibold tracking-tight', large ? 'text-lg' : 'text-base')}>{TITLES[result.resultStatus] ?? 'Result'}</h3>
+        <p className={clsx('leading-6', large ? 'text-[15px]' : 'text-sm')}>{message(result)}</p>
+        {sourceCases.length > 0 && (
+          <p className="text-sm">
+            Source cases (staff only):{' '}
+            {sourceCases.map((item, index) => (
+              <span key={item.id}>
+                {index > 0 && ', '}
+                <Link to={`/staff/cases/${item.id}`} className="font-mono font-medium underline underline-offset-2">
+                  {item.caseNumber ?? item.id}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
+        {showAskButton && (
+          <Button variant="secondary" iconRight={ArrowRight} className="h-auto! min-h-10 max-w-full whitespace-normal! py-2 text-left" onClick={() => navigate(`/student/requests/new?${prefillParams(query, result.queryType)}`)}>
+            Ask your placement cell to verify
+          </Button>
+        )}
+      </div>
     </section>
   )
 }

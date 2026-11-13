@@ -1,34 +1,40 @@
+import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { ROLES, STAFF_ROLES } from '../auth/roles.js'
 import Layout from '../components/Layout.jsx'
 import ProtectedRoute from '../components/ProtectedRoute.jsx'
-import AdminCollegeDetailPage from '../pages/AdminCollegeDetailPage.jsx'
-import AdminCollegesPage from '../pages/AdminCollegesPage.jsx'
-import AuditLogPage from '../pages/AuditLogPage.jsx'
-import CaseQueuePage from '../pages/CaseQueuePage.jsx'
-import ChangePasswordPage from '../pages/ChangePasswordPage.jsx'
+import { Skeleton } from '../components/ui/index.js'
 import AdvisoriesPage from '../pages/AdvisoriesPage.jsx'
 import AdvisoryDetailPage from '../pages/AdvisoryDetailPage.jsx'
+import ChangePasswordPage from '../pages/ChangePasswordPage.jsx'
 import LandingPage from '../pages/LandingPage.jsx'
-import PendingApprovalPage from '../pages/PendingApprovalPage.jsx'
-import PrivacyPage from '../pages/PrivacyPage.jsx'
-import StaffStudentsPage from '../pages/StaffStudentsPage.jsx'
-import TermsPage from '../pages/TermsPage.jsx'
-import NotificationsPage from '../pages/NotificationsPage.jsx'
-import StaffAdvisoriesPage from '../pages/StaffAdvisoriesPage.jsx'
-import StaffAdvisoryEditPage from '../pages/StaffAdvisoryEditPage.jsx'
-import StatsPage from '../pages/StatsPage.jsx'
 import LoginPage from '../pages/LoginPage.jsx'
 import MyRequestsPage from '../pages/MyRequestsPage.jsx'
 import NewRequestPage from '../pages/NewRequestPage.jsx'
 import NotFoundPage from '../pages/NotFoundPage.jsx'
+import NotificationsPage from '../pages/NotificationsPage.jsx'
+import PendingApprovalPage from '../pages/PendingApprovalPage.jsx'
 import RegisterPage from '../pages/RegisterPage.jsx'
-import RegistryPage from '../pages/RegistryPage.jsx'
 import RequestDetailPage from '../pages/RequestDetailPage.jsx'
-import StaffCaseDetailPage from '../pages/StaffCaseDetailPage.jsx'
-import StaffHomePage from '../pages/StaffHomePage.jsx'
-import StaffMembersPage from '../pages/StaffMembersPage.jsx'
 import StudentHomePage from '../pages/StudentHomePage.jsx'
+
+// Staff, admin and legal pages load on demand, so the student bundle stays lean.
+const AdminCollegeDetailPage = lazy(() => import('../pages/AdminCollegeDetailPage.jsx'))
+const AdminCollegesPage = lazy(() => import('../pages/AdminCollegesPage.jsx'))
+const AuditLogPage = lazy(() => import('../pages/AuditLogPage.jsx'))
+const CaseQueuePage = lazy(() => import('../pages/CaseQueuePage.jsx'))
+const PrivacyPage = lazy(() => import('../pages/PrivacyPage.jsx'))
+const RegistryPage = lazy(() => import('../pages/RegistryPage.jsx'))
+const StaffAdvisoriesPage = lazy(() => import('../pages/StaffAdvisoriesPage.jsx'))
+const StaffAdvisoryEditPage = lazy(() => import('../pages/StaffAdvisoryEditPage.jsx'))
+const StaffCaseDetailPage = lazy(() => import('../pages/StaffCaseDetailPage.jsx'))
+const StaffHomePage = lazy(() => import('../pages/StaffHomePage.jsx'))
+const StaffMembersPage = lazy(() => import('../pages/StaffMembersPage.jsx'))
+const StaffStudentsPage = lazy(() => import('../pages/StaffStudentsPage.jsx'))
+const StatsPage = lazy(() => import('../pages/StatsPage.jsx'))
+const TermsPage = lazy(() => import('../pages/TermsPage.jsx'))
+
+const page = (element) => <Suspense fallback={<Skeleton rows={4} label="Loading page" />}>{element}</Suspense>
 
 export default function AppRoutes() {
   return (
@@ -37,8 +43,8 @@ export default function AppRoutes() {
         <Route index element={<LandingPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
-        <Route path="privacy" element={<PrivacyPage />} />
-        <Route path="terms" element={<TermsPage />} />
+        <Route path="privacy" element={page(<PrivacyPage />)} />
+        <Route path="terms" element={page(<TermsPage />)} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="change-password" element={<ChangePasswordPage />} />
@@ -56,24 +62,24 @@ export default function AppRoutes() {
           <Route path="advisories/:id" element={<AdvisoryDetailPage />} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={STAFF_ROLES} />}>
-          <Route path="staff" element={<StaffHomePage />} />
+          <Route path="staff" element={page(<StaffHomePage />)} />
           {/* Officers may view the list; only TPO heads see the management controls. */}
-          <Route path="staff/members" element={<StaffMembersPage />} />
-          <Route path="staff/cases" element={<CaseQueuePage />} />
-          <Route path="staff/cases/:id" element={<StaffCaseDetailPage />} />
-          <Route path="staff/registry" element={<RegistryPage />} />
-          <Route path="staff/advisories" element={<StaffAdvisoriesPage />} />
-          <Route path="staff/advisories/new" element={<StaffAdvisoryEditPage />} />
-          <Route path="staff/advisories/:id" element={<StaffAdvisoryEditPage />} />
-          <Route path="staff/stats" element={<StatsPage />} />
-          <Route path="staff/students" element={<StaffStudentsPage />} />
+          <Route path="staff/members" element={page(<StaffMembersPage />)} />
+          <Route path="staff/cases" element={page(<CaseQueuePage />)} />
+          <Route path="staff/cases/:id" element={page(<StaffCaseDetailPage />)} />
+          <Route path="staff/registry" element={page(<RegistryPage />)} />
+          <Route path="staff/advisories" element={page(<StaffAdvisoriesPage />)} />
+          <Route path="staff/advisories/new" element={page(<StaffAdvisoryEditPage />)} />
+          <Route path="staff/advisories/:id" element={page(<StaffAdvisoryEditPage />)} />
+          <Route path="staff/stats" element={page(<StatsPage />)} />
+          <Route path="staff/students" element={page(<StaffStudentsPage />)} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.TPO_HEAD]} />}>
-          <Route path="staff/audit" element={<AuditLogPage />} />
+          <Route path="staff/audit" element={page(<AuditLogPage />)} />
         </Route>
         <Route element={<ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN]} />}>
-          <Route path="admin" element={<AdminCollegesPage />} />
-          <Route path="admin/colleges/:id" element={<AdminCollegeDetailPage />} />
+          <Route path="admin" element={page(<AdminCollegesPage />)} />
+          <Route path="admin/colleges/:id" element={page(<AdminCollegeDetailPage />)} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

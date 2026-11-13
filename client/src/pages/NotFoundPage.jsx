@@ -1,15 +1,23 @@
-import { Link } from 'react-router-dom'
+import { ArrowLeft, Compass } from 'lucide-react'
+import { ButtonLink, EmptyState } from '../components/ui/index.js'
 import usePageTitle from '../hooks/usePageTitle.js'
 
 export default function NotFoundPage() {
   usePageTitle('Page not found')
   return (
-    <section className="space-y-3 text-center">
-      <h1 className="text-2xl font-bold text-slate-900">Page not found</h1>
-      <p className="text-slate-600">The page you are looking for does not exist.</p>
-      <Link to="/" className="inline-block font-medium text-blue-700 hover:underline">
-        Back to home
-      </Link>
-    </section>
+    <div className="mx-auto max-w-xl py-10">
+      <EmptyState
+        icon={Compass}
+        as="h1"
+        title="Page not found"
+        action={
+          <ButtonLink to="/" variant="secondary" icon={ArrowLeft}>
+            Back to home
+          </ButtonLink>
+        }
+      >
+        The page you are looking for does not exist.
+      </EmptyState>
+    </div>
   )
 }
