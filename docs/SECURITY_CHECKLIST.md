@@ -156,6 +156,10 @@ One row per rule in [SECURITY_DESIGN.md](SECURITY_DESIGN.md), with the automated
 | Unsafe production email/Google config refused, without printing values | `emailService.test.js` — "startup configuration (G15)" |
 | Account and promote-year scoped to the user / college; head only | `account.test.js`; `promoteYear.test.js` |
 | Reset token removed from the address bar | client `resetPassword.test.jsx` — "reads the token from the link, removes it from the address bar…" |
+| (9.1) Email-verification gate for students only | `emailVerification.test.js` — "legacy unverified tpo_head, placement_officer and super_admin reach their routes; a student is still gated"; client `verifyEmail.test.jsx` — "an unverified %s is never sent to /verify-email" |
+| (9.1) Email failure log line has no key, code, address or body | `emailDiagnostics.test.js` — "a failed send prints one JSON line with type, priority, status, errorCode and providerStatus only"; Brevo code mapping cases |
+| (9.1) SMTP-format Brevo key refused at startup without printing it | `emailDiagnostics.test.js` — "an SMTP key (xsmtpsib-) is refused at startup in %s without printing it" |
+| (9.1) `ops:email-test` prints only ok/messageId or errorCode/providerStatus | `emailDiagnostics.test.js` — "ops:email-test (Phase 9.1)" |
 
 ## Mandatory rules for later phases
 

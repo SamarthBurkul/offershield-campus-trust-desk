@@ -1,6 +1,9 @@
-/** The signed-in user still has to confirm the emailed code (only when the server requires it). */
+/**
+ * The signed-in student still has to confirm the emailed code (only when the server requires it).
+ * Staff and super-admin accounts are never gated (the server applies the same rule).
+ */
 export const needsEmailVerification = (user, emailVerificationRequired) =>
-  Boolean(user && emailVerificationRequired && user.emailVerified === false)
+  Boolean(user && user.role === 'student' && emailVerificationRequired && user.emailVerified === false)
 
 /** Restricted accounts see only their gate page (verify email, temporary password, pending approval). */
 export const isRestricted = (user, emailVerificationRequired) =>

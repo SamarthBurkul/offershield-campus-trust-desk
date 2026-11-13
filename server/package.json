@@ -17,7 +17,8 @@
     "seed:demo": "node scripts/seed-demo.js",
     "seed:showcase": "node scripts/seed-showcase.js",
     "ops:retention": "node scripts/ops-retention.js",
-    "ops:backfill-email-verified": "node scripts/ops-backfill-email-verified.js"
+    "ops:backfill-email-verified": "node scripts/ops-backfill-email-verified.js",
+    "ops:email-test": "node scripts/ops-email-test.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

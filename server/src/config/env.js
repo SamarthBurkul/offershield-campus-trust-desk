@@ -121,6 +121,10 @@ const envSchema = z
       for (const key of ['BREVO_API_KEY', 'EMAIL_FROM']) {
         if (env[key] === undefined) ctx.addIssue({ code: 'custom', path: [key], message: 'is required when EMAIL_PROVIDER is brevo' });
       }
+      // A common mistake: the SMTP key (xsmtpsib-) does not work with the HTTP API. Only the prefix is checked.
+      if (typeof env.BREVO_API_KEY === 'string' && env.BREVO_API_KEY.startsWith('xsmtpsib-')) {
+        ctx.addIssue({ code: 'custom', path: ['BREVO_API_KEY'], message: 'is an SMTP key; create an API key (xkeysib-…)' });
+      }
     }
     // Google is all-or-nothing: a partial setup is almost always a deployment mistake.
     const google = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].filter((key) => env[key] !== undefined);

@@ -10,11 +10,36 @@
 | 6 | Advisories, notifications, stats, UI polish | **Passed (architect-reviewed and user-tested 2026-11-12)** |
 | 7 | Pilot readiness: dialog focus fix, manual-approval students, staff-assisted resets, fair rate limits, privacy/terms with consent, production single service, showcase demo college, ops scripts, deployment and user docs | **Passed (architect-reviewed 2026-11-12)** |
 | 8 | Premium UI redesign (presentation only): design system, role shells, every page restyled, en-IN formatting, lazy-loaded staff pages, screenshots | **Passed (architect-reviewed 2026-11-13)** |
-| 9 | Google sign-in (OIDC + PKCE), email service (Brevo/log) with budget, email verification, self-service password reset, email notifications with preferences, Account page, academic-year promotion, case-desk fold below 1600 px | **Implemented — awaiting architect review** |
+| 9 | Google sign-in (OIDC + PKCE), email service (Brevo/log) with budget, email verification, self-service password reset, email notifications with preferences, Account page, academic-year promotion, case-desk fold below 1600 px | **Passed (architect-reviewed, user-verified 2026-11-13)** |
+| 9.1 | Final fixes: email-verification gate for students only, visible email failures with Brevo error codes, SMTP-key startup check, `ops:email-test`, email troubleshooting docs, README v1.0, release notes | **Implemented — awaiting architect review** |
+
+**Release:** v1.0.0 candidate — see [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
+## Phase 9.1 — details
+
+**Status:** Implemented — awaiting architect review (not yet passed).
+
+### Implemented
+
+- The `EMAIL_NOT_VERIFIED` gate (server middleware and client `ProtectedRoute`) applies to students only; legacy unverified staff and super-admin accounts are never sent to `/verify-email`.
+- Every `failed` or `skipped_budget` send prints one JSON line in all environments (`{t, event: "email_send", type, priority, status, errorCode, providerStatus}`); `sent` is printed only in development. Brevo 4xx responses map their `code` to `BREVO_UNAUTHORIZED`, `BREVO_PERMISSION_DENIED`, `BREVO_INVALID_PARAMETER`, … (message text never read).
+- Startup refuses `EMAIL_PROVIDER=brevo` with an SMTP key (`xsmtpsib-…`).
+- `npm run ops:email-test -w server -- --to <address>` prints only `ok messageId=…` or `errorCode=… providerStatus=…`; refuses the log provider.
+- OPERATIONS: "Troubleshooting email" table and Gmail plus-addressing testing tip. README rewritten for v1.0; RELEASE_NOTES added.
+
+### Tests executed (2026-11-13, Node v22.13.1)
+
+| Command | Result | Exit code |
+| --- | --- | --- |
+| `npm test` | 494 server tests (44 suites) + 105 client tests (20 files) passed, 0 failed | 0 |
+| `npm run lint` | ESLint 0 problems; oxlint 0 warnings, 0 errors | 0 |
+| `npm run build` | main JS 375.15 kB (111.02 kB gzip); CSS 68.31 kB (12.58 kB gzip) | 0 |
+| `npm audit --omit=dev` | found 0 vulnerabilities | 0 |
+| Production CSP check | production build, in-memory MongoDB, headless Chrome: 30 page checks (public, student, TPO head; 1440 and 390 px), 0 CSP violations, 0 JS exceptions, no horizontal overflow | — |
 
 ## Phase 9 — details
 
-**Status:** Implemented — awaiting architect review (not yet passed).
+**Status:** Passed (architect-reviewed, user-verified 2026-11-13).
 
 ### Implemented
 

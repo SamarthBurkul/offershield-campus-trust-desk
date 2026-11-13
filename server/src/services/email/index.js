@@ -22,9 +22,12 @@ const state = {
   settings: null,
   provider: null,
   pending: new Set(),
+  eventSink: (line) => console.log(line),
 };
 
-function configureEmail(config, { fetchImpl, sink } = {}) {
+function configureEmail(config, { fetchImpl, sink, eventSink } = {}) {
+  // Tests pass their own sink; the test runner stays quiet otherwise.
+  state.eventSink = eventSink ?? (config.nodeEnv === 'test' ? () => {} : (line) => console.log(line));
   const email = config.email;
   const provider =
     email.provider === 'brevo'
@@ -37,6 +40,7 @@ function configureEmail(config, { fetchImpl, sink } = {}) {
     dailyBudget: email.dailyBudget,
     requireVerification: email.requireVerification,
     baseUrl: config.appBaseUrl ?? config.clientOrigins?.[0] ?? 'http://localhost:5173',
+    nodeEnv: config.nodeEnv,
   };
   return provider;
 }
@@ -53,6 +57,20 @@ const isEmailEnabled = () => settings().enabled;
 const isVerificationRequired = () => settings().requireVerification;
 const getProvider = () => (settings(), state.provider);
 const getBaseUrl = () => settings().baseUrl;
+
+/**
+ * One JSON line per notable send outcome. failed / skipped_budget are printed in every environment
+ * (so a misconfigured provider is visible in Render logs); "sent" only in development. Never includes
+ * the recipient, subject, body, code, link, key or provider message text.
+ */
+function logOutcome({ type, priority, status, errorCode = null, providerStatus = null }) {
+  if (status === 'sent') {
+    if (state.settings?.nodeEnv === 'development') state.eventSink(JSON.stringify({ t: new Date().toISOString(), event: 'email_send', type, status }));
+    return;
+  }
+  if (status !== 'failed' && status !== 'skipped_budget') return;
+  state.eventSink(JSON.stringify({ t: new Date().toISOString(), event: 'email_send', type, priority, status, errorCode, providerStatus }));
+}
 
 async function writeLog(user, type, priority, status, extra = {}) {
   try {
@@ -88,6 +106,7 @@ async function sendEmail(user, type, context = {}, { path } = {}) {
     release = await budget.reserve(priority, config.dailyBudget);
     if (!release) {
       await writeLog(user, type, priority, 'skipped_budget');
+      logOutcome({ type, priority, status: 'skipped_budget' });
       return 'skipped_budget';
     }
     const result = await state.provider.send({
@@ -101,11 +120,13 @@ async function sendEmail(user, type, context = {}, { path } = {}) {
       devLink: type === 'password_reset' ? context.link : undefined,
     });
     await writeLog(user, type, priority, 'sent', { providerMessageId: result?.messageId ?? null });
+    logOutcome({ type, priority, status: 'sent' });
     return 'sent';
   } catch (err) {
     const code = String(err?.code ?? err?.name ?? 'Error').slice(0, 40);
-    console.error(`[email] send failed: ${code}`);
+    const providerStatus = Number.isInteger(err?.providerStatus) ? err.providerStatus : null;
     await writeLog(user, type, priority, 'failed', { errorCode: code });
+    logOutcome({ type, priority, status: 'failed', errorCode: code, providerStatus });
     return 'failed';
   } finally {
     release?.();

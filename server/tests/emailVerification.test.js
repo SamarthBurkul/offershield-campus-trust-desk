@@ -206,3 +206,28 @@ describe('ops:backfill-email-verified (G10)', () => {
     expect(await backfillEmailVerified()).toEqual({ emailVerifiedSet: 0, authMethodsSet: 0 });
   });
 });
+
+describe('the gate applies to students only (Phase 9.1)', () => {
+  test('legacy unverified tpo_head, placement_officer and super_admin reach their routes; a student is still gated', async () => {
+    const { college, head, officer, student } = await createCollegeWithMembers('alpha');
+    const { createSuperAdmin } = require('./helpers/factories');
+    const root = await createSuperAdmin();
+    await User.updateMany({}, { $set: { emailVerifiedAt: null } });
+
+    const headAgent = await loginAgent(app, 'head@alpha.test.edu', TEST_PASSWORD);
+    expect((await headAgent.get('/api/v1/auth/me')).body.user.emailVerified).toBe(false);
+    expect((await headAgent.get('/api/v1/staff/students')).status).toBe(200);
+    expect((await headAgent.get('/api/v1/account')).status).toBe(200);
+    const officerAgent = await loginAgent(app, 'officer@alpha.test.edu', TEST_PASSWORD);
+    expect((await officerAgent.get('/api/v1/staff/cases')).status).toBe(200);
+    expect((await officerAgent.get('/api/v1/notifications')).status).toBe(200);
+    const rootAgent = await loginAgent(app, 'root@platform.test', TEST_PASSWORD);
+    expect((await rootAgent.get('/api/v1/admin/colleges')).status).toBe(200);
+
+    const studentAgent = await loginAgent(app, 'student@alpha.test.edu', TEST_PASSWORD);
+    const blocked = await studentAgent.get('/api/v1/notifications');
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('EMAIL_NOT_VERIFIED');
+    expect([college, head, officer, student, root].every(Boolean)).toBe(true);
+  });
+});

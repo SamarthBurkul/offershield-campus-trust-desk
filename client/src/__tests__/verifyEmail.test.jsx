@@ -112,6 +112,14 @@ describe('VerifyEmailPage (G20)', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Verify your email' })).not.toBeInTheDocument())
   })
 
+  it.each(['tpo_head', 'placement_officer', 'super_admin'])('an unverified %s is never sent to /verify-email (Phase 9.1)', async (role) => {
+    getMe.mockResolvedValue({ user: student({ role, collegeId: role === 'super_admin' ? null : 'c1', year: null, branch: null }), college: role === 'super_admin' ? null : college, emailVerificationRequired: true })
+    renderAt('/verify-email')
+    // The page sends anyone who does not need verification to their home instead.
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Verify your email' })).not.toBeInTheDocument())
+    expect(screen.queryByText('We sent a 6-digit code to')).not.toBeInTheDocument()
+  })
+
   it('email verification comes before the pending-approval page', async () => {
     getMe.mockResolvedValue({ user: student({ status: 'pending_approval' }), college, emailVerificationRequired: true })
     renderAt('/pending-approval')

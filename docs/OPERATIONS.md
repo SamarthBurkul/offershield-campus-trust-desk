@@ -47,6 +47,28 @@ With email configured (Brevo), students and staff can also use **Forgot password
 - **Checking delivery:** the `emaillogs` collection has one row per attempt (`type`, `priority`, `status` = sent / skipped_budget / skipped_pref / failed, `errorCode`), kept 90 days, with no content. Many `failed` rows with `BREVO_401` mean the API key is wrong; `BREVO_400` usually means the sender address is not verified in Brevo.
 - **Email verification:** with Brevo, password sign-ups must enter a 6-digit code before anything else; staff cannot approve an unverified student. A student who never got the code can press Resend (after 60 s, 5 per hour); otherwise check the spam folder and the address on the Students page.
 
+## Troubleshooting email
+
+Start with `npm run ops:email-test -w server -- --to you@example.com` (with the production variables in `server/.env`, or in the Render shell). It prints only `ok messageId=…` or `errorCode=… providerStatus=…`. On Render, every failed or budget-skipped send also writes one JSON line: `{"event":"email_send","type":…,"status":"failed","errorCode":…,"providerStatus":…}`.
+
+| Symptom / errorCode | Cause | Fix |
+| --- | --- | --- |
+| No "Forgot password?" form; `GET /api/v1/policies` shows `"emailEnabled": false` | The email variables were not loaded (unset on Render, or the service was not redeployed) | Set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY`, `EMAIL_FROM` and redeploy |
+| Startup fails: "BREVO_API_KEY is an SMTP key" | The SMTP key (`xsmtpsib-…`) was copied instead of an API key | Brevo → SMTP & API → **API keys** → generate a key starting `xkeysib-` |
+| `BREVO_UNAUTHORIZED` (401) | Wrong, revoked or mistyped API key | Generate a new API key and update `BREVO_API_KEY` |
+| `BREVO_PERMISSION_DENIED` (403) — works locally, fails on Render | Brevo **Security → Authorised IPs** is on; Render's outgoing IPs change | Turn the Authorised IPs restriction **off** for this key |
+| `BREVO_PERMISSION_DENIED` / `BREVO_ACCOUNT_UNDER_VALIDATION` on a new account | The Brevo account is not activated for transactional email yet | Finish Brevo's account activation (profile, phone, activation request) and wait for approval |
+| `BREVO_INVALID_PARAMETER` / `BREVO_400` | `EMAIL_FROM` is not a verified sender (or its domain is not authenticated) | Brevo → Senders, domains → verify the sender or authenticate the domain |
+| Status `sent` but nothing arrives | Spam folder; a `@gmail.com` sender is rewritten to `…@brevosend.com` and often lands in spam | Check spam; use a sender on your own authenticated domain (SPF/DKIM/DMARC, DEPLOYMENT §4b) |
+| `skipped_budget` lines | The daily budget (`EMAIL_DAILY_BUDGET`, critical cap 290) is used up | Wait until 00:00 UTC, or raise the budget within your Brevo plan |
+| Existing students suddenly asked to verify, or staff cannot approve old accounts | Accounts created before Phase 9 have no `emailVerifiedAt` | Run `npm run ops:backfill-email-verified -w server` against that database |
+
+Staff and super-admin accounts are never asked to verify their email; only students are.
+
+## Testing tips
+
+Gmail ignores everything after `+` in the local part: `name+student1@gmail.com` and `name+student2@gmail.com` both deliver to `name@gmail.com`. One mailbox can therefore receive the codes and reset links for many test accounts, while OfferShield treats each alias as a separate account (use a `manual_approval` college, since Gmail addresses do not match a college domain).
+
 ## Google sign-in (Phase 9)
 
 - Shown on the sign-in and registration pages when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set.

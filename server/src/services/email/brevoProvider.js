@@ -4,13 +4,37 @@
 const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
 const TIMEOUT_MS = 10_000;
 
+// Brevo's documented error codes. Only these become an errorCode; the message text is never read.
+const BREVO_ERROR_CODES = new Set([
+  'unauthorized',
+  'permission_denied',
+  'invalid_parameter',
+  'missing_parameter',
+  'not_enough_credits',
+  'account_under_validation',
+  'duplicate_parameter',
+  'duplicate_request',
+  'document_not_found',
+  'method_not_allowed',
+  'not_acceptable',
+  'too_many_requests',
+]);
+
 class EmailProviderError extends Error {
-  constructor(code, retryable) {
+  constructor(code, retryable, providerStatus = null) {
     super(`Email provider error: ${code}`);
     this.name = 'EmailProviderError';
     this.code = code;
     this.retryable = retryable;
+    this.providerStatus = providerStatus;
   }
+}
+
+/** BREVO_UNAUTHORIZED etc. from the response's `code` field, else BREVO_<status>. */
+async function errorCodeFor(response) {
+  const body = await response.json().catch(() => null);
+  const code = typeof body?.code === 'string' ? body.code.toLowerCase() : null;
+  return code && BREVO_ERROR_CODES.has(code) ? `BREVO_${code.toUpperCase()}` : `BREVO_${response.status}`;
 }
 
 async function attempt(payload, { apiKey, fetchImpl }) {
@@ -29,8 +53,8 @@ async function attempt(payload, { apiKey, fetchImpl }) {
   } finally {
     clearTimeout(timer);
   }
-  if (response.status >= 500) throw new EmailProviderError('BREVO_5XX', true);
-  if (!response.ok) throw new EmailProviderError(`BREVO_${response.status}`, false);
+  if (response.status >= 500) throw new EmailProviderError('BREVO_5XX', true, response.status);
+  if (!response.ok) throw new EmailProviderError(await errorCodeFor(response), false, response.status);
   const body = await response.json().catch(() => ({}));
   return { messageId: typeof body?.messageId === 'string' ? body.messageId.slice(0, 200) : null };
 }
@@ -60,4 +84,4 @@ function createBrevoProvider({ apiKey, from, fromName, fetchImpl = (...args) => 
   };
 }
 
-module.exports = { createBrevoProvider, EmailProviderError, BREVO_URL, TIMEOUT_MS };
+module.exports = { createBrevoProvider, EmailProviderError, BREVO_URL, TIMEOUT_MS, BREVO_ERROR_CODES };
